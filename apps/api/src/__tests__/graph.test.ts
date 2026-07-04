@@ -24,6 +24,18 @@ describe('buildGraph', () => {
     expect(graph.edges).toContainEqual({ source: 'a.md', target: 'Nowhere' });
   });
 
+  it('attaches the declared frontmatter type (normalized) to real-note nodes only', () => {
+    const graph = buildGraph([
+      { path: 'ann.md', content: '---\ntype: Person\n---\n# Ann\n\nLinks [[missing]].' },
+      { path: 'plain.md', content: '# Plain note, no type' },
+    ]);
+
+    expect(graph.nodes.find((n) => n.id === 'ann.md')?.type).toBe('person');
+    // Untyped real notes and unresolved placeholders carry no `type` key at all.
+    expect(graph.nodes.find((n) => n.id === 'plain.md')).not.toHaveProperty('type');
+    expect(graph.nodes.find((n) => n.id === 'missing')).not.toHaveProperty('type');
+  });
+
   it('carries a typed relation onto the edge and attaches tags to nodes', () => {
     const docs: GraphDocument[] = [
       {

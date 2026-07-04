@@ -116,6 +116,7 @@ describe('fresh-clone MCP end-to-end', () => {
         'recent_questions',
         'run_feedback',
         'run_maintenance',
+        'schema_pack',
         'search_notes',
         'semantic_search',
         'think',
@@ -294,10 +295,11 @@ describe('fresh-clone MCP end-to-end', () => {
     await client.connect(transport);
 
     const { tools } = await client.listTools();
-    expect(tools.length).toBe(25);
+    expect(tools.length).toBe(26);
     expect(tools.map((tool) => tool.name)).toContain('create_note');
     expect(tools.map((tool) => tool.name)).toContain('think');
     expect(tools.map((tool) => tool.name)).toContain('proposal_stats');
+    expect(tools.map((tool) => tool.name)).toContain('schema_pack');
 
     // The readiness banner is what an MCP host log shows on a spawn — assert
     // both the prefix and the mode so a silent regression here is visible.

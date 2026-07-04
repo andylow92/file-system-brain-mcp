@@ -80,15 +80,20 @@ in your notes goes through a **review queue you approve**.
   can't fully answer, so you know what's missing.
 - **🔌 Plug in any AI agent (MCP).** A built-in
   [MCP](https://modelcontextprotocol.io) server hands the whole vault to agents
-  like Claude, Cursor, or OpenClaw as **25 tools** (read, search, patch,
+  like Claude, Cursor, or OpenClaw as **26 tools** (read, search, patch,
   propose…). **Every agent write is logged** to an audit trail, and edits land as
   **proposals you approve** — the agent suggests, only you commit.
 - **🧹 Self-tidying vault (maintenance).** A "dream-cycle" scan finds **broken
-  links, orphaned notes, near-duplicates, and stale-but-load-bearing notes**
-  (heavily linked yet long unchanged — "is this still accurate?") and files each
-  fix as a proposal. Re-running is safe — it never spams your review queue, and
-  it **learns your taste**: the duplicate-detection bar self-tunes from which
-  proposals you approve vs. reject.
+  links, orphaned notes, near-duplicates, stale-but-load-bearing notes**
+  (heavily linked yet long unchanged — "is this still accurate?"), **and schema
+  issues** (a note typed wrong, or a relation pointing at the wrong kind of note)
+  and files each fix as a proposal. Re-running is safe — it never spams your
+  review queue, and it **learns your taste**: the duplicate-detection bar
+  self-tunes from which proposals you approve vs. reject.
+- **🏷️ NEW — Typed notes (schema packs).** Give a note a `type:` (person,
+  meeting, project, idea…) and the graph **colours it by what it is**, agents
+  learn the canonical types to author well-formed notes, and the maintenance scan
+  flags notes that break the vocabulary — all from plain frontmatter, no database.
 - **🪄 NEW — Learns from your edits (feedback loop).** When an agent drafts
   outreach — an **X post, LinkedIn message, or email** — and you rewrite it
   before sending, that edit is valuable signal. A scan compares the **draft vs.
@@ -137,7 +142,7 @@ apps/api (Node HTTP server)
    └─ Search (text/semantic/hybrid), backlinks, graph, think, audit, proposals
 
 apps/mcp (MCP stdio server)
-   ├─ Exposes the vault to AI agents as 25 tools
+   ├─ Exposes the vault to AI agents as 26 tools
    └─ Embeds the API in-process — one self-contained command for an MCP host
 
 packages/shared
@@ -320,6 +325,7 @@ See the full deployment examples in this README’s history and backend docs.
 - ✅ Built-in MCP server — use the vault as an agent's brain
 - ✅ Cited answers + offline gap analysis (`think`) and dream-cycle maintenance
 - ✅ Self-improving outreach **feedback loop** — learns your voice from draft→final edits
+- ✅ Typed page types / **schema packs** — canonical `type:`s, graph colouring, validation
 - Mermaid diagrams + real vector embeddings (the cached index is the seam)
 - Git sync workflows
 - Multi-user auth + permissions

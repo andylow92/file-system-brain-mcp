@@ -5,7 +5,29 @@
 > Keep it accurate: update the status tables when you finish a unit of work.
 > Routed from [`AGENTS.md`](../AGENTS.md).
 
-_Last updated: 2026-06-28 (review-queue learning + freshness scoring)_
+_Last updated: 2026-07-04 (schema packs / typed page types)_
+
+> **Latest change.** **Schema packs / typed page types** (backlog #19), the last
+> open item in the gbrain-inspired "Brain ideas" sequence. A pure helper in
+> `@repo/shared` (`schema.ts` — `DEFAULT_SCHEMA_PACK`, `getPageType`,
+> `validateVault`) defines a compact vocabulary of canonical note `type:` values
+> (person, meeting, project, idea…), each with a colour and the typed
+> **frontmatter** relations it may declare (`meeting.attendees → person`, etc.).
+> It powers three things off metadata the vault already stores: **(1) graph
+> colouring** — `buildGraph` attaches each note's declared `type` to its node and
+> the Graph view tints by it (schema colour wins over first-tag colour); **(2)
+> validation** — `scanVault` gains an opt-in `schemaPack` option that emits a
+> report-only `schema` maintenance finding per violation (unknown `type:`, a
+> relation the type can't declare, or a relation pointing at the wrong kind of
+> note), surfaced in the Maintenance panel and `run_maintenance` for human review
+> (no auto-edit); **(3) discovery** — `GET /api/schema` + the `schema_pack` MCP
+> tool (26th) expose the pack so an agent authors well-typed notes. All pure,
+> deterministic, offline (no model/network/key); no new write path — validation
+> rides the existing proposal/maintenance plumbing. **Retrieval boosting on the
+> same metadata is the documented follow-on, intentionally not wired yet.** Tests:
+> `apps/api` `__tests__/schema.test.ts` (pure) + `routes/schema.test.ts`
+> (endpoint + finding), plus node-type cases in `__tests__/graph.test.ts` and
+> schema cases in `__tests__/maintenance.test.ts`.
 
 > **Latest change.** Two more self-improvement loops from
 > [`improvement-ideas.md`](improvement-ideas.md) (#2, #5), both pure/offline/
@@ -300,9 +322,9 @@ apps/web (React + Vite)          apps/api (Node HTTP)             packages/share
                                    index/ (VaultIndex: cached chunks+IDF,            (buildSemanticIndex,
                                            EventBus-invalidated, lazy rebuild)        queryRankedChunks)
 
-apps/mcp (MCP stdio server, 25 tools) — exposes the vault to agents: list/read/
+apps/mcp (MCP stdio server, 26 tools) — exposes the vault to agents: list/read/
   create/update/patch/search/semantic_search/hybrid_search/get_context/think/
-  backlinks/get_graph/recent_activity/move/delete plus read_block,
+  backlinks/get_graph/schema_pack/recent_activity/move/delete plus read_block,
   get_block_anchors, propose_edit + list_proposals + run_maintenance +
   run_feedback. When
   API_BASE_URL is unset, runs the storage API in-process on 127.0.0.1 (ephemeral
@@ -332,45 +354,46 @@ Key facts an agent must know:
 
 ## 3. Current capabilities (grounded in code)
 
-| Capability                                  | Status | Notes                                                                            |
-| ------------------------------------------- | :----: | -------------------------------------------------------------------------------- |
-| GitHub-style file tree + folders-first sort |   ✅   | `FileTreeSidebar`, `GlobalLayout`                                                |
-| Create / rename / move / delete (md + dirs) |   ✅   | `/api/file`, `/api/dir`, `/api/path`                                             |
-| Read / update with optimistic concurrency   |   ✅   | `etag` / `lastModified` in `handlePutFile`                                       |
-| Edit ↔ Preview tabs                         |   ✅   | `FileViewerTabs`; hard toggle (not live WYSIWYG)                                 |
-| Path sandboxing inside `CONTENT_ROOT`       |   ✅   | `PathResolver`                                                                   |
-| Sidebar filter by **filename**              |   ✅   | `filterQuery` — name/path only, not file contents                                |
-| "Fix Format" via OpenRouter                 |   ✅   | Client-side only (`openrouter/`)                                                 |
-| `[[wikilinks]]` (clickable) + resolution    |   ✅   | `markdown.ts`, `remarkWikilinks`                                                 |
-| Backlinks panel                             |   ✅   | `/api/backlinks`, `BacklinksPanel`                                               |
-| Frontmatter + `#tags` parsing               |   ✅   | `@repo/shared` `markdown.ts`; chips in preview                                   |
-| Rich renderer (GFM, math, highlight)        |   ✅   | `react-markdown` + remark-gfm/math, rehype-katex                                 |
-| Full-text + tag search (Ctrl/Cmd-K)         |   ✅   | `/api/search`, `SearchDialog`                                                    |
-| Semantic (relevance) search                 |   ✅   | `/api/semantic-search`, `semantic.ts` (TF-IDF)                                   |
-| Hybrid retrieval (RRF fusion)               |   ✅   | `/api/hybrid-search`, `hybrid_search` tool, `hybrid.ts` (`reciprocalRankFusion`) |
-| `think` (cited answers + offline gaps)      |   ✅   | `/api/think`, `think` tool, `think.ts` (`assembleAnswerKit`)                     |
-| Dream-cycle maintenance → proposals         |   ✅   | `/api/maintenance[/scan]`, `run_maintenance`, `maintenance.ts` (`scanVault`)     |
-| Outreach feedback loop → proposals          |   ✅   | `/api/feedback[/scan]`, `run_feedback`, `feedback.ts` (`scanFeedback`)           |
-| Provenance / audit feed (Activity tab)      |   ✅   | `X-Actor`, `AuditLog`, `/api/audit`, `ActivityPanel`                             |
-| Agent-edit review/approval queue            |   ✅   | `/api/proposals`, `ProposalStore`, `ReviewPanel`                                 |
-| Granular agent writes (append/prepend/      |   ✅   | `PATCH /api/file`, `patch.ts`, `patch_note` MCP tool                             |
-| section + idempotency + dry-run)            |        |                                                                                  |
-| Block anchors (`^id`) + stable note ids     |   ✅   | `blocks.ts`, `noteId.ts`, `/api/block[-anchors]`                                 |
-| Typed wikilinks (`[[T\|rel:supports]]`)     |   ✅   | `markdown.ts`, `Backlink.type`                                                   |
-| Visual knowledge graph (Graph tab + API)    |   ✅   | `graph.ts`, `GET /api/graph`, `get_graph`, `GraphView`/`KnowledgeGraph`          |
-| **MCP server** (agent tools)                |   ✅   | `apps/mcp` (25 tools) — writes as `agent:mcp`                                    |
-| Self-contained MCP launch (embedded API)    |   ✅   | `npm run start:agent` → bin `fsbrain-mcp`, see CONNECT.md                        |
-| Fresh-clone e2e MCP test (in `npm test`)    |   ✅   | `apps/mcp/src/__tests__/freshClone.test.ts`                                      |
-| Live layer (SSE + file watcher)             |   ✅   | `events/` EventBus + `fs.watch`, `GET /api/events`, `useVaultEvents`             |
-| Cached retrieval index (chunks+IDF, reused) |   ✅   | `index/vaultIndex.ts`, EventBus-invalidated; backs search + semantic             |
-| Context bundles (token-budgeted RAG)        |   ✅   | `GET /api/context`, `get_context` tool, `context.ts` (pure packing)              |
-| `npm run build` green (all workspaces)      |   ✅   | NodeNext `.js` imports + shared `rootDir`                                        |
-| Retrieval eval harness (recall floors)      |   ✅   | `retrievalEval.ts`, fixture + `routes/retrievalEval.test.ts` (in `npm test`)     |
-| CI (test + lint + build + format on PRs)    |   ✅   | `.github/workflows/ci.yml` — mirrors the local quality gate                      |
-| Skill notes (procedural memory)             |   ✅   | `skills.ts`, `GET /api/skills`, `list_skills` tool; writes via proposals         |
-| Question log (demand-driven gaps)           |   ✅   | `questions.ts`, `questions.jsonl`, `GET /api/questions`, `recent_questions`      |
-| Review-queue learning (self-tuning)         |   ✅   | `proposalStats.ts`, `GET /api/proposals/stats`, `proposal_stats`; tunes the scan |
-| Freshness scoring (stale + load-bearing)    |   ✅   | `maintenance.ts` `stale` kind (mtime + inbound links) → report-only finding      |
+| Capability                                  | Status | Notes                                                                                                     |
+| ------------------------------------------- | :----: | --------------------------------------------------------------------------------------------------------- |
+| GitHub-style file tree + folders-first sort |   ✅   | `FileTreeSidebar`, `GlobalLayout`                                                                         |
+| Create / rename / move / delete (md + dirs) |   ✅   | `/api/file`, `/api/dir`, `/api/path`                                                                      |
+| Read / update with optimistic concurrency   |   ✅   | `etag` / `lastModified` in `handlePutFile`                                                                |
+| Edit ↔ Preview tabs                         |   ✅   | `FileViewerTabs`; hard toggle (not live WYSIWYG)                                                          |
+| Path sandboxing inside `CONTENT_ROOT`       |   ✅   | `PathResolver`                                                                                            |
+| Sidebar filter by **filename**              |   ✅   | `filterQuery` — name/path only, not file contents                                                         |
+| "Fix Format" via OpenRouter                 |   ✅   | Client-side only (`openrouter/`)                                                                          |
+| `[[wikilinks]]` (clickable) + resolution    |   ✅   | `markdown.ts`, `remarkWikilinks`                                                                          |
+| Backlinks panel                             |   ✅   | `/api/backlinks`, `BacklinksPanel`                                                                        |
+| Frontmatter + `#tags` parsing               |   ✅   | `@repo/shared` `markdown.ts`; chips in preview                                                            |
+| Rich renderer (GFM, math, highlight)        |   ✅   | `react-markdown` + remark-gfm/math, rehype-katex                                                          |
+| Full-text + tag search (Ctrl/Cmd-K)         |   ✅   | `/api/search`, `SearchDialog`                                                                             |
+| Semantic (relevance) search                 |   ✅   | `/api/semantic-search`, `semantic.ts` (TF-IDF)                                                            |
+| Hybrid retrieval (RRF fusion)               |   ✅   | `/api/hybrid-search`, `hybrid_search` tool, `hybrid.ts` (`reciprocalRankFusion`)                          |
+| `think` (cited answers + offline gaps)      |   ✅   | `/api/think`, `think` tool, `think.ts` (`assembleAnswerKit`)                                              |
+| Dream-cycle maintenance → proposals         |   ✅   | `/api/maintenance[/scan]`, `run_maintenance`, `maintenance.ts` (`scanVault`)                              |
+| Outreach feedback loop → proposals          |   ✅   | `/api/feedback[/scan]`, `run_feedback`, `feedback.ts` (`scanFeedback`)                                    |
+| Provenance / audit feed (Activity tab)      |   ✅   | `X-Actor`, `AuditLog`, `/api/audit`, `ActivityPanel`                                                      |
+| Agent-edit review/approval queue            |   ✅   | `/api/proposals`, `ProposalStore`, `ReviewPanel`                                                          |
+| Granular agent writes (append/prepend/      |   ✅   | `PATCH /api/file`, `patch.ts`, `patch_note` MCP tool                                                      |
+| section + idempotency + dry-run)            |        |                                                                                                           |
+| Block anchors (`^id`) + stable note ids     |   ✅   | `blocks.ts`, `noteId.ts`, `/api/block[-anchors]`                                                          |
+| Typed wikilinks (`[[T\|rel:supports]]`)     |   ✅   | `markdown.ts`, `Backlink.type`                                                                            |
+| Visual knowledge graph (Graph tab + API)    |   ✅   | `graph.ts`, `GET /api/graph`, `get_graph`, `GraphView`/`KnowledgeGraph`                                   |
+| **MCP server** (agent tools)                |   ✅   | `apps/mcp` (26 tools) — writes as `agent:mcp`                                                             |
+| Self-contained MCP launch (embedded API)    |   ✅   | `npm run start:agent` → bin `fsbrain-mcp`, see CONNECT.md                                                 |
+| Fresh-clone e2e MCP test (in `npm test`)    |   ✅   | `apps/mcp/src/__tests__/freshClone.test.ts`                                                               |
+| Live layer (SSE + file watcher)             |   ✅   | `events/` EventBus + `fs.watch`, `GET /api/events`, `useVaultEvents`                                      |
+| Cached retrieval index (chunks+IDF, reused) |   ✅   | `index/vaultIndex.ts`, EventBus-invalidated; backs search + semantic                                      |
+| Context bundles (token-budgeted RAG)        |   ✅   | `GET /api/context`, `get_context` tool, `context.ts` (pure packing)                                       |
+| `npm run build` green (all workspaces)      |   ✅   | NodeNext `.js` imports + shared `rootDir`                                                                 |
+| Retrieval eval harness (recall floors)      |   ✅   | `retrievalEval.ts`, fixture + `routes/retrievalEval.test.ts` (in `npm test`)                              |
+| CI (test + lint + build + format on PRs)    |   ✅   | `.github/workflows/ci.yml` — mirrors the local quality gate                                               |
+| Skill notes (procedural memory)             |   ✅   | `skills.ts`, `GET /api/skills`, `list_skills` tool; writes via proposals                                  |
+| Question log (demand-driven gaps)           |   ✅   | `questions.ts`, `questions.jsonl`, `GET /api/questions`, `recent_questions`                               |
+| Review-queue learning (self-tuning)         |   ✅   | `proposalStats.ts`, `GET /api/proposals/stats`, `proposal_stats`; tunes the scan                          |
+| Freshness scoring (stale + load-bearing)    |   ✅   | `maintenance.ts` `stale` kind (mtime + inbound links) → report-only finding                               |
+| Schema packs / typed page types             |   ✅   | `schema.ts` (`DEFAULT_SCHEMA_PACK`, `validateVault`); graph colour + `schema` finding + `GET /api/schema` |
 
 Legend: ✅ done · 🚧 in progress · ⬜ not started
 
@@ -557,8 +580,9 @@ polish, mobile, and multi-device sync are **explicitly deprioritized** for now.
 
 ### Next up (open, in priority order)
 
-The planned roadmap is complete. The remaining items are optional enhancements,
-not part of the original plan:
+The planned roadmap is complete, and with schema packs (#19) shipped the entire
+gbrain-inspired "Brain ideas" sequence (#15–22) is done too. The remaining items
+are optional enhancements, not part of the original plan:
 
 13. **Real embeddings** (the remaining half of RAG). Swap the TF-IDF ranker for
     vector embeddings (remote `/v1/embeddings` or on-device) behind the existing
@@ -651,9 +675,28 @@ into infrastructure we already have rather than adding a new subsystem.
     opt-out) + `__tests__/markdown.test.ts` (`splitFrontmatter`) +
     `routes/graph.test.ts` (endpoint self-wiring). _gbrain parallel: typed edges
     (`works_at`, `attended`) auto-extracted on write, zero LLM calls._
-19. **Schema packs / typed page types.** Canonical frontmatter `type:` values
-    (person, meeting, idea…) with allowed relationships — powers graph node
-    colouring, validation, and retrieval boosting. _gbrain parallel:
+19. **Schema packs / typed page types.** ✅ **Done.** A pure helper in
+    `@repo/shared` (`schema.ts`) defines `DEFAULT_SCHEMA_PACK` — a compact set of
+    canonical `type:` values (note, person, project, meeting, idea, topic,
+    decision, source, task, skill), each with a display colour and the typed
+    **frontmatter** relations it may declare (e.g. `meeting.attendees → person`,
+    `project.owner → person`). Three payoffs off metadata the vault already
+    stores: **(a) graph colouring** — `buildGraph` attaches each note's declared
+    `type` to its node (`GraphNode.type`, normalized, real notes only) and the
+    Graph view tints by it via `getPageType`, schema colour winning over the
+    first-tag colour, with a matching legend; **(b) validation** — `validateVault`
+    flags an unknown `type:`, a relation the type can't declare, or a relation
+    pointing at the wrong kind of note, surfaced as a **report-only** `schema`
+    `MaintenanceKind` (opt-in via `scanVault`'s new `schemaPack` option, so every
+    prior caller is unchanged; files no proposal); **(c) discovery** —
+    `GET /api/schema` + the `schema_pack` MCP tool (26th) return `{ pageTypes }`
+    so an agent authors well-typed notes. All pure/deterministic/offline; no new
+    write path. **Retrieval boosting on the same metadata is the documented
+    follow-on, not wired yet** — it would touch the ranking stacks the eval
+    harness (#20) pins, so it is deferred behind that safety net. Tests: `apps/api`
+    `__tests__/schema.test.ts` (pure) + `routes/schema.test.ts` (endpoint +
+    finding + no-proposal), plus node-type cases in `__tests__/graph.test.ts` and
+    schema cases in `__tests__/maintenance.test.ts`. _gbrain parallel:
     `gbrain-base-v2` with 15 canonical types._
 20. **Retrieval eval harness.** ✅ **Done.** A golden fixture of
     `query → expected-note` pairs (`apps/api`

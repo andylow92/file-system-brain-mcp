@@ -5,7 +5,7 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
-import type { GraphData, GraphNode } from '@repo/shared';
+import { getPageType, type GraphData, type GraphNode } from '@repo/shared';
 import { colorForTag, computeAdjacency, computeGraphLayout, type Point } from './graphLayout';
 
 const VIEW_WIDTH = 1000;
@@ -31,6 +31,11 @@ interface ViewTransform {
 function nodeColor(node: GraphNode): string {
   if (node.unresolved) {
     return 'var(--color-danger)';
+  }
+  // A canonical page type wins over tags: colour a note by *what it is* first.
+  const pageType = getPageType(node.type);
+  if (pageType) {
+    return pageType.color;
   }
   if (node.tags.length > 0) {
     return colorForTag(node.tags[0]);
@@ -74,18 +79,30 @@ export function KnowledgeGraph({ graph, onSelectFile, selectedPath }: KnowledgeG
     return map;
   }, [graph]);
 
-  // A quiet key for the colours actually in use (first tag of each note).
+  // A quiet key for the colours actually in use. Mirrors `nodeColor`'s
+  // precedence: a note with a canonical page type is keyed by that type, else by
+  // its first tag — so the legend can never claim a colour the graph isn't using.
   const legend = useMemo(() => {
+    const types = new Map<string, string>();
     const tags = new Set<string>();
     let hasUnresolved = false;
     for (const node of graph.nodes) {
       if (node.unresolved) {
         hasUnresolved = true;
+        continue;
+      }
+      const pageType = getPageType(node.type);
+      if (pageType) {
+        types.set(pageType.type, pageType.color);
       } else if (node.tags[0]) {
         tags.add(node.tags[0]);
       }
     }
-    return { tags: [...tags].sort().slice(0, 8), hasUnresolved };
+    return {
+      types: [...types.entries()].sort((a, b) => a[0].localeCompare(b[0])).slice(0, 8),
+      tags: [...tags].sort().slice(0, 8),
+      hasUnresolved,
+    };
   }, [graph]);
 
   const [hoveredId, setHoveredId] = useState<string | null>(null);
@@ -314,8 +331,14 @@ export function KnowledgeGraph({ graph, onSelectFile, selectedPath }: KnowledgeG
         </g>
       </svg>
 
-      {legend.tags.length > 0 || legend.hasUnresolved ? (
+      {legend.types.length > 0 || legend.tags.length > 0 || legend.hasUnresolved ? (
         <div className="graph-legend" aria-hidden="true">
+          {legend.types.map(([type, color]) => (
+            <span key={`type:${type}`} className="graph-legend__item">
+              <span className="graph-legend__swatch" style={{ backgroundColor: color, color }} />
+              {type}
+            </span>
+          ))}
           {legend.tags.map((tag) => (
             <span key={tag} className="graph-legend__item">
               <span

@@ -5,11 +5,18 @@ import { getErrorMessage, runMaintenance } from '../api/files';
 const KIND_LABEL: Record<MaintenanceFinding['kind'], string> = {
   broken_link: 'Broken links',
   duplicate: 'Possible duplicates',
+  schema: 'Schema issues',
   stale: 'Stale but load-bearing',
   orphan: 'Orphan notes',
 };
 
-const KIND_ORDER: MaintenanceFinding['kind'][] = ['broken_link', 'duplicate', 'stale', 'orphan'];
+const KIND_ORDER: MaintenanceFinding['kind'][] = [
+  'broken_link',
+  'duplicate',
+  'schema',
+  'stale',
+  'orphan',
+];
 
 interface MaintenancePanelProps {
   /** Called after a scan files proposals, so the Review list below can refresh. */
@@ -56,8 +63,10 @@ export function MaintenancePanel({ onFiled }: MaintenancePanelProps) {
         <div>
           <h3 className="maintenance-panel__title">Dream-cycle maintenance</h3>
           <p className="maintenance-panel__hint">
-            Scan for broken links, orphan notes, near-duplicates, and stale but load-bearing notes.
-            Fixes are filed as proposals below for you to approve or reject.
+            Scan for broken links, orphan notes, near-duplicates, and stale but load-bearing notes —
+            actionable fixes are filed as proposals below for you to approve or reject. Schema
+            issues are listed for you to correct in the note&rsquo;s frontmatter (never filed as
+            proposals).
           </p>
         </div>
         <button

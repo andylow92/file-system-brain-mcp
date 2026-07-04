@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { scanVault, type MaintenanceDocument } from '@repo/shared';
+import { DEFAULT_SCHEMA_PACK, scanVault, type MaintenanceDocument } from '@repo/shared';
 
 const doc = (path: string, content: string): MaintenanceDocument => ({ path, content });
 
@@ -197,5 +197,24 @@ describe('scanVault — clean vault, determinism, and empty corpus', () => {
 
   it('returns no findings for an empty corpus', () => {
     expect(scanVault([])).toEqual([]);
+  });
+});
+
+describe('scanVault — schema (opt-in via schemaPack)', () => {
+  it('does not emit schema findings unless a pack is supplied', () => {
+    const corpus = [doc('a.md', '---\ntype: unicorn\n---\n# A\n\nLinks [[a]].')];
+    expect(scanVault(corpus).filter((f) => f.kind === 'schema')).toHaveLength(0);
+  });
+
+  it('emits a report-only schema finding per violation when a pack is supplied', () => {
+    const findings = scanVault([doc('a.md', '---\ntype: unicorn\n---\n# A')], {
+      schemaPack: DEFAULT_SCHEMA_PACK,
+    });
+    const schema = findings.filter((f) => f.kind === 'schema');
+    expect(schema).toHaveLength(1);
+    expect(schema[0].paths).toEqual(['a.md']);
+    expect(schema[0].detail).toContain('unicorn');
+    // Report-only: schema findings never carry an auto-fix suggestion.
+    expect(schema[0].suggestion).toBeUndefined();
   });
 });

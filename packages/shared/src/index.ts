@@ -159,6 +159,7 @@ export * from './patch.js';
 export * from './proposalStats.js';
 export * from './questions.js';
 export * from './retrievalEval.js';
+export * from './schema.js';
 export * from './search.js';
 export * from './semantic.js';
 export * from './skills.js';
