@@ -128,6 +128,40 @@ describe('buildGraph', () => {
     });
   });
 
+  it('collapses a redundant untyped body edge when a typed edge connects the same pair', () => {
+    const docs: GraphDocument[] = [
+      {
+        path: 'a.md',
+        content: '---\nrelated: [[Foo]]\n---\nSee also [[Foo]] for details.',
+      },
+      { path: 'foo.md', content: '# Foo' },
+    ];
+
+    const graph = buildGraph(docs);
+
+    // Only the typed `related` edge survives — the bare prose mention is subsumed.
+    const aToFoo = graph.edges.filter((e) => e.source === 'a.md' && e.target === 'foo.md');
+    expect(aToFoo).toEqual([{ source: 'a.md', target: 'foo.md', type: 'related' }]);
+  });
+
+  it('keeps distinct typed edges between the same pair', () => {
+    const docs: GraphDocument[] = [
+      {
+        path: 'a.md',
+        content: '---\nrelated: [[b]]\n---\nAlso [[b|rel:supports]].',
+      },
+      { path: 'b.md', content: '# B' },
+    ];
+
+    const graph = buildGraph(docs);
+
+    const aToB = graph.edges.filter((e) => e.source === 'a.md' && e.target === 'b.md');
+    expect(aToB).toEqual([
+      { source: 'a.md', target: 'b.md', type: 'related' },
+      { source: 'a.md', target: 'b.md', type: 'supports' },
+    ]);
+  });
+
   it('prefers a link-level rel: type over the frontmatter field name', () => {
     const docs: GraphDocument[] = [
       { path: 'a.md', content: '---\nsee: [[b|rel:supports]]\n---\n# A' },

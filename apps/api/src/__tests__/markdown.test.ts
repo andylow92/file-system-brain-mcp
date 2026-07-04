@@ -7,6 +7,7 @@ import {
   parseNote,
   parseWikilinkToken,
   resolveWikilink,
+  splitFrontmatter,
 } from '@repo/shared';
 
 describe('parseWikilinkToken', () => {
@@ -75,6 +76,24 @@ describe('parseFrontmatter', () => {
     const result = parseFrontmatter(raw);
     expect(result.hasFrontmatter).toBe(false);
     expect(result.body).toBe(raw);
+  });
+});
+
+describe('splitFrontmatter', () => {
+  it('returns null when there is no opening fence', () => {
+    expect(splitFrontmatter('# Title\n\nBody')).toBeNull();
+  });
+
+  it('returns null for an unterminated fence', () => {
+    expect(splitFrontmatter('---\ntitle: x\nstill going')).toBeNull();
+  });
+
+  it('returns the raw inner lines and the trimmed body', () => {
+    const raw = ['---', 'title: Hello', 'related: [[Foo]]', '---', '', 'Body text'].join('\n');
+    expect(splitFrontmatter(raw)).toEqual({
+      lines: ['title: Hello', 'related: [[Foo]]'],
+      body: 'Body text',
+    });
   });
 });
 

@@ -21,7 +21,15 @@
  * Everything here is pure + dependency-free so it runs in both the Node API and
  * the browser and is unit-tested in isolation (its tests live in `apps/api`).
  */
-import { extractTags, extractWikilinks, parseFrontmatter, resolveWikilink } from './markdown.js';
+import {
+  FRONTMATTER_KEY_LINE,
+  FRONTMATTER_LIST_ITEM,
+  extractTags,
+  extractWikilinks,
+  parseFrontmatter,
+  resolveWikilink,
+  splitFrontmatter,
+} from './markdown.js';
 
 export interface GraphNode {
   /** Stable node id: a real note's logical path, or the raw target for a placeholder. */
@@ -74,10 +82,6 @@ export interface FrontmatterRelation {
   type: string;
 }
 
-const FRONTMATTER_FENCE = /^---[ \t]*$/;
-const FM_KEY = /^([A-Za-z0-9_-]+):[ \t]*(.*)$/;
-const FM_LIST_ITEM = /^[ \t]*-[ \t]+(.*)$/;
-
 /**
  * Derive typed relations from a note's frontmatter. Any frontmatter field whose
  * value contains one or more `[[wikilinks]]` yields one relation per link, with
@@ -88,25 +92,21 @@ const FM_LIST_ITEM = /^[ \t]*-[ \t]+(.*)$/;
  * reserved-key list is needed. A link that carries its own `rel:` type keeps it,
  * overriding the field name.
  *
- * Both inline (`related: [[Foo]], [[Bar]]`) and YAML block-list
- * (`related:\n  - "[[Foo]]"`) forms are recognised. Parsing the raw frontmatter
- * block directly (rather than the minimal-YAML `parseFrontmatter` values) keeps
- * `[[...]]` intact, which the `[...]` inline-array parser would otherwise mangle.
+ * **Recognised forms:** inline (`related: [[Foo]], [[Bar]]`) and YAML block-list
+ * (`related:\n  - "[[Foo]]"`) only. Consistent with the vault's minimal-YAML
+ * subset, `[[links]]` inside a folded/literal block scalar (`key: |`) are NOT
+ * attributed to the key. Fence-finding and line classification are shared with
+ * `parseFrontmatter` via `splitFrontmatter` + `FRONTMATTER_KEY_LINE` /
+ * `FRONTMATTER_LIST_ITEM`, but this scanner reads each value's **raw text**
+ * (rather than the minimal-YAML parsed value) so `[[...]]` stays intact — the
+ * `[...]` inline-array parser would otherwise mangle it. Note that value text is
+ * run through `extractWikilinks`, which strips code spans first, so a backtick
+ * in a relation value can drop content before link extraction (a non-issue for
+ * real relation fields).
  */
 export function extractFrontmatterRelations(content: string): FrontmatterRelation[] {
-  const lines = content.split('\n');
-  if (lines.length === 0 || !FRONTMATTER_FENCE.test(lines[0])) {
-    return [];
-  }
-
-  let closingIndex = -1;
-  for (let i = 1; i < lines.length; i += 1) {
-    if (FRONTMATTER_FENCE.test(lines[i])) {
-      closingIndex = i;
-      break;
-    }
-  }
-  if (closingIndex === -1) {
+  const block = splitFrontmatter(content);
+  if (!block) {
     return [];
   }
 
@@ -119,16 +119,14 @@ export function extractFrontmatterRelations(content: string): FrontmatterRelatio
     }
   };
 
-  for (let i = 1; i < closingIndex; i += 1) {
-    const line = lines[i];
-
-    const listItem = FM_LIST_ITEM.exec(line);
+  for (const line of block.lines) {
+    const listItem = FRONTMATTER_LIST_ITEM.exec(line);
     if (currentKey && listItem) {
       collect(currentKey, listItem[1]);
       continue;
     }
 
-    const kv = FM_KEY.exec(line);
+    const kv = FRONTMATTER_KEY_LINE.exec(line);
     if (!kv) {
       continue;
     }
@@ -151,6 +149,12 @@ function labelForPath(id: string): string {
  * unresolved link becomes an edge to a placeholder node (`unresolved: true`).
  * Self-links and duplicate edges (same source/target/type) are dropped. Nodes
  * and edges are returned in a stable, sorted order for deterministic output.
+ *
+ * When a pair of notes is connected by both a typed edge (a frontmatter relation
+ * or a `rel:` link) and a bare untyped body mention, the redundant **untyped**
+ * edge is collapsed away — a formal relation subsumes a prose mention, so
+ * consumers see one connection, not a doubled one. Genuinely distinct typed
+ * edges between the same pair (e.g. `related` + `supports`) are all kept.
  */
 export function buildGraph(
   documents: readonly GraphDocument[],
@@ -231,8 +235,21 @@ export function buildGraph(
     }
   }
 
+  // Collapse a redundant untyped edge when a typed edge already connects the
+  // same pair — the formal relation subsumes the bare mention.
+  const typedPairs = new Set<string>();
+  for (const edge of edges) {
+    if (edge.type) {
+      typedPairs.add(JSON.stringify([edge.source, edge.target]));
+    }
+  }
+  const collapsedEdges = edges.filter(
+    (edge) =>
+      edge.type !== undefined || !typedPairs.has(JSON.stringify([edge.source, edge.target])),
+  );
+
   const sortedNodes = [...nodes.values()].sort((a, b) => a.id.localeCompare(b.id));
-  const sortedEdges = edges.sort(
+  const sortedEdges = collapsedEdges.sort(
     (a, b) =>
       a.source.localeCompare(b.source) ||
       a.target.localeCompare(b.target) ||

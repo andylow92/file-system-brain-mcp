@@ -228,7 +228,10 @@ vault re-read). `.fsbrain/` is excluded. Read-only (emits no `VaultEvent`).
   node with `unresolved: true` and empty `tags`.
 - `edges`: `{ source, target, type? }`. `source`/`target` are node ids;
   `type` carries the typed relation from `[[Target|rel:supports]]` when present.
-  Self-links and duplicate edges are dropped.
+  Self-links and duplicate edges are dropped. When a pair is connected by both a
+  typed edge and a bare untyped body mention, the redundant untyped edge is
+  collapsed away (a formal relation subsumes a prose mention); distinct typed
+  edges between the same pair are all kept.
 - **Self-wiring from frontmatter.** Any frontmatter field whose value contains a
   `[[wikilink]]` becomes a typed edge with the **field name as `type`** — so
   `related: [[Foo]]` yields `{ source, target: "Foo.md", type: "related" }` with

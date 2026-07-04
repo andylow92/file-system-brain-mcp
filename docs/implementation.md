@@ -637,13 +637,20 @@ into infrastructure we already have rather than adding a new subsystem.
     (`extractFrontmatterRelations`; `buildGraph` gains a `frontmatterRelations`
     option, default on — `false` restores body-only edges). No new write path or
     endpoint: `GET /api/graph` + the `get_graph` MCP tool serve the richer edges
-    from the same cached `VaultIndex`. `buildGraph` now scans the body with the
+    from the same cached `VaultIndex`. `buildGraph` scans the body with the
     frontmatter stripped so a relation field isn't double-counted as a plain
-    body link. Tests: `apps/api` `__tests__/graph.test.ts` (pure: field-name
-    types, inline arrays, block lists, unresolved targets, `rel:` precedence,
-    opt-out) + `routes/graph.test.ts` (endpoint self-wiring). _gbrain parallel:
-    typed edges (`works_at`, `attended`) auto-extracted on write, zero LLM
-    calls._
+    body link, and **collapses** a redundant untyped body edge when a typed edge
+    already connects the same pair (a formal relation subsumes a prose mention;
+    distinct typed edges are all kept). Fence-finding + line classification are
+    shared with `parseFrontmatter` via a `splitFrontmatter` primitive (+
+    `FRONTMATTER_KEY_LINE` / `FRONTMATTER_LIST_ITEM`) so the two frontmatter
+    scanners can't drift. Only inline and `-` block-list forms are recognised
+    (folded/literal `key: |` scalars are not, per the minimal-YAML contract).
+    Tests: `apps/api` `__tests__/graph.test.ts` (pure: field-name types, inline
+    arrays, block lists, unresolved targets, `rel:` precedence, edge collapse,
+    opt-out) + `__tests__/markdown.test.ts` (`splitFrontmatter`) +
+    `routes/graph.test.ts` (endpoint self-wiring). _gbrain parallel: typed edges
+    (`works_at`, `attended`) auto-extracted on write, zero LLM calls._
 19. **Schema packs / typed page types.** Canonical frontmatter `type:` values
     (person, meeting, idea…) with allowed relationships — powers graph node
     colouring, validation, and retrieval boosting. _gbrain parallel:
