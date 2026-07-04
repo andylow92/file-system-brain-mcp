@@ -20,11 +20,12 @@
  *   when the caller passes a `now` reference time plus per-note `modifiedAt`
  *   timestamps (the API derives them from each file's mtime). Callers that omit
  *   them — including every pre-existing one — get exactly the prior behavior.
- * - `schema` — a note that violates the **schema pack**: an unknown `type:`, or a
- *   frontmatter relation that type is not allowed to declare, or a relation
- *   pointing at the wrong kind of note (see `schema.ts`). Report-only, and
- *   **opt-in**: computed only when the caller passes a `schemaPack`. Delegated to
- *   `validateVault`, so the two never drift.
+ * - `schema` — a note that violates the **schema pack**: an unknown `type:`, a
+ *   recognized frontmatter relation used on a type that doesn't allow it, or a
+ *   relation pointing at the wrong kind of note (see `schema.ts`; unknown
+ *   frontmatter fields are left alone). Report-only, and **opt-in**: computed
+ *   only when the caller passes a `schemaPack`. Delegated to `validateVault`, so
+ *   the two never drift.
  *
  * Everything here is pure + dependency-free so it runs in both the Node API and
  * the browser and is unit-tested in isolation (its tests live in `apps/api`). It

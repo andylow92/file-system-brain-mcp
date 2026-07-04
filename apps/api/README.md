@@ -625,10 +625,12 @@ above. It runs fully offline (no model, no API key) over the cached `VaultIndex`
   flagged. (Reads aren't logged, so inbound-citation count is the deterministic
   stand-in for "how often retrieved".)
 - `schema` — a note that violates the **schema pack** (`GET /api/schema`): an
-  unknown `type:`, a **frontmatter** relation the type is not allowed to declare,
-  or a relation pointing at the wrong kind of note. Report-only (no suggestion) —
-  the fix is a human editing frontmatter. The server passes `DEFAULT_SCHEMA_PACK`
-  to `scanVault`; the validation itself is pure (`schema.ts` `validateVault`).
+  unknown `type:`, a recognized **frontmatter** relation used on a type that
+  doesn't allow it (an unknown field name is treated as the vault's own metadata
+  and left alone), or a relation pointing at the wrong kind of note. Report-only
+  (no suggestion) — the fix is a human editing frontmatter. The server passes
+  `DEFAULT_SCHEMA_PACK` to `scanVault`; the validation itself is pure (`schema.ts`
+  `validateVault`).
 
 Each finding is `{ kind, paths, detail, score?, suggestion? }`, where
 `suggestion` (when present) is a safe, reversible `{ action, path, content?,

@@ -49,8 +49,8 @@ describe('validateVault — unknown_type', () => {
 });
 
 describe('validateVault — disallowed_relation', () => {
-  it('flags a frontmatter relation the note type is not allowed to declare', () => {
-    // `person` has no `attendees` relation (that belongs to `meeting`).
+  it('flags a recognized relation used on the wrong type', () => {
+    // `attendees` is a real relation (of `meeting`) but not allowed on `person`.
     const violations = validateVault([
       doc('ann.md', '---\ntype: person\nattendees: [[bob]]\n---\n# Ann'),
       doc('bob.md', '---\ntype: person\n---\n# Bob'),
@@ -58,6 +58,17 @@ describe('validateVault — disallowed_relation', () => {
     const disallowed = violations.filter((v) => v.kind === 'disallowed_relation');
     expect(disallowed).toHaveLength(1);
     expect(disallowed[0]).toMatchObject({ path: 'ann.md', value: 'attendees' });
+  });
+
+  it('ignores an unknown frontmatter field (the vault’s own metadata)', () => {
+    // `status` / `area` are in no type's vocabulary — a typed note using richer
+    // frontmatter than the built-in pack must not generate noise.
+    const violations = validateVault([
+      doc('apollo.md', '---\ntype: project\nstatus: [[Active]]\narea: [[Work]]\n---\n# Apollo'),
+      doc('Active.md', '# Active'),
+      doc('Work.md', '# Work'),
+    ]);
+    expect(violations.filter((v) => v.kind === 'disallowed_relation')).toEqual([]);
   });
 
   it('accepts the universal `related` relation on any type, to any target', () => {

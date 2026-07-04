@@ -10,9 +10,11 @@
  *   by its first tag. The graph attaches each note's declared `type` to its node
  *   (see `graph.ts`); the renderer resolves the colour via {@link getPageType}.
  * - **Validation.** {@link validateVault} flags a note that declares an unknown
- *   `type:`, or a **frontmatter** relation that type is not allowed to have, or a
- *   relation pointing at the wrong kind of note. These surface (report-only) as a
- *   `schema` maintenance finding the human reviews — never an auto-edit.
+ *   `type:`, a **frontmatter** relation the pack recognizes but not for this
+ *   type (a relation used on the wrong kind of note), or a relation pointing at
+ *   the wrong kind of note. These surface (report-only) as a `schema` maintenance
+ *   finding the human reviews — never an auto-edit. Unknown frontmatter fields
+ *   are left alone, so a vault's own richer metadata doesn't generate noise.
  * - **Retrieval boosting (future).** The same type/relation metadata is the seam
  *   a later ranker can boost on; that half is intentionally not wired yet.
  *
@@ -247,8 +249,11 @@ const VIOLATION_RANK: Record<SchemaViolationKind, number> = {
  * Rules, all conservative to keep the signal low-noise:
  * - **`unknown_type`** — the note declares a `type:` not in the pack. (An
  *   untyped note is always fine; typing is opt-in.)
- * - **`disallowed_relation`** — a *frontmatter* relation whose name is not among
- *   the note type's allowed relations (only checked for a known type).
+ * - **`disallowed_relation`** — a *frontmatter* relation that the pack recognizes
+ *   for some other type but not for this note's type (a relation used on the
+ *   wrong kind of note, e.g. `attendees` on a `person`). A field name in no
+ *   type's vocabulary is treated as the vault's own metadata and never flagged,
+ *   so richer frontmatter than the built-in pack doesn't generate noise.
  * - **`target_type_mismatch`** — a frontmatter relation whose resolved target is
  *   a note of a canonical type the rule does not permit. Skipped when the target
  *   is unresolved (that is a broken link, reported separately) or is
@@ -259,6 +264,19 @@ export function validateVault(
   pack: SchemaPack = DEFAULT_SCHEMA_PACK,
 ): SchemaViolation[] {
   const allPaths = documents.map((doc) => doc.path);
+
+  // The union of every relation name any type in the pack allows — the pack's
+  // whole "relation vocabulary". A frontmatter relation not in this note's type
+  // is only a violation when it is a *recognized* relation misused on the wrong
+  // type (e.g. `attendees` on a `person`); a name in no type's vocabulary is
+  // treated as the vault's own extended metadata and left alone, so a richer
+  // frontmatter than the built-in pack doesn't spam findings.
+  const knownRelationNames = new Set<string>();
+  for (const pageType of pack) {
+    for (const rule of pageType.relations) {
+      knownRelationNames.add(rule.name);
+    }
+  }
 
   // Resolve each note to its canonical type (only when known), so a relation's
   // target type can be checked without re-parsing every note per relation.
@@ -292,12 +310,16 @@ export function validateVault(
     for (const relation of extractFrontmatterRelations(doc.content)) {
       const rule = rulesByName.get(relation.type);
       if (!rule) {
-        violations.push({
-          kind: 'disallowed_relation',
-          path: doc.path,
-          value: relation.type,
-          detail: `"${label}" (type ${declared}) declares relation "${relation.type}", which is not allowed for that type.`,
-        });
+        // Only flag a *recognized* relation used on the wrong type; an unknown
+        // field name is the vault's own metadata, not a schema violation.
+        if (knownRelationNames.has(relation.type)) {
+          violations.push({
+            kind: 'disallowed_relation',
+            path: doc.path,
+            value: relation.type,
+            detail: `"${label}" (type ${declared}) declares relation "${relation.type}", which the schema pack allows on other types but not on ${declared}.`,
+          });
+        }
         continue;
       }
       if (!rule.targetTypes || rule.targetTypes.length === 0) {
