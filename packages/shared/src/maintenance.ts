@@ -189,8 +189,8 @@ function sortFindings(findings: MaintenanceFinding[]): MaintenanceFinding[] {
     if (KIND_RANK[a.kind] !== KIND_RANK[b.kind]) {
       return KIND_RANK[a.kind] - KIND_RANK[b.kind];
     }
-    const pa = a.paths.join(' ');
-    const pb = b.paths.join(' ');
+    const pa = a.paths.join('\u0000');
+    const pb = b.paths.join('\u0000');
     return pa.localeCompare(pb) || a.detail.localeCompare(b.detail);
   });
 }

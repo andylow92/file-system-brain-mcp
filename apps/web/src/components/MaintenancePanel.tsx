@@ -63,8 +63,10 @@ export function MaintenancePanel({ onFiled }: MaintenancePanelProps) {
         <div>
           <h3 className="maintenance-panel__title">Dream-cycle maintenance</h3>
           <p className="maintenance-panel__hint">
-            Scan for broken links, orphan notes, near-duplicates, stale but load-bearing notes, and
-            schema issues. Fixes are filed as proposals below for you to approve or reject.
+            Scan for broken links, orphan notes, near-duplicates, and stale but load-bearing notes —
+            actionable fixes are filed as proposals below for you to approve or reject. Schema
+            issues are listed for you to correct in the note&rsquo;s frontmatter (never filed as
+            proposals).
           </p>
         </div>
         <button
