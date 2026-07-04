@@ -5,7 +5,23 @@
 > Keep it accurate: update the status tables when you finish a unit of work.
 > Routed from [`AGENTS.md`](../AGENTS.md).
 
-_Last updated: 2026-07-04 (schema packs / typed page types)_
+_Last updated: 2026-07-04 (Mermaid diagrams)_
+
+> **Latest change.** **Mermaid diagrams** (backlog #14) — a fenced
+> ` ```mermaid ` block now renders as an SVG diagram in the preview. The
+> preview's `pre` renderer routes a `language === 'mermaid'` fence to a new
+> `MermaidDiagram` component instead of the highlight.js code block. Mermaid is
+> **dynamically imported** on first use (memoized module-level load +
+> `initialize`), so the ~600 KB library is code-split out of the main/preview
+> bundles and only fetched by notes that actually contain a diagram — the build
+> confirms mermaid lands in its own lazy chunks, not `index-*.js`. Theme follows
+> `prefers-color-scheme`; `securityLevel: 'strict'` sanitizes the (possibly
+> agent-authored) source; while it loads and on a render error the raw source is
+> shown in a `<pre>`, so a diagram never blanks the preview. Client-only, no
+> runtime network. Tests: `apps/web`
+> `__tests__/MarkdownPreviewPane.mermaid.test.tsx` (routing, SVG injection, error
+> fallback, non-mermaid fence still highlighting). With this, both renderer
+> follow-ups are closed; only **real embeddings (#13)** remains open.
 
 > **Latest change.** **Schema packs / typed page types** (backlog #19), the last
 > open item in the gbrain-inspired "Brain ideas" sequence. A pure helper in
@@ -367,6 +383,7 @@ Key facts an agent must know:
 | Backlinks panel                             |   ✅   | `/api/backlinks`, `BacklinksPanel`                                                                        |
 | Frontmatter + `#tags` parsing               |   ✅   | `@repo/shared` `markdown.ts`; chips in preview                                                            |
 | Rich renderer (GFM, math, highlight)        |   ✅   | `react-markdown` + remark-gfm/math, rehype-katex                                                          |
+| Mermaid diagrams (fenced ` ```mermaid `)    |   ✅   | `MermaidDiagram` (lazy-imported); `pre` renderer routes mermaid fences to SVG, degrades to source         |
 | Full-text + tag search (Ctrl/Cmd-K)         |   ✅   | `/api/search`, `SearchDialog`                                                                             |
 | Semantic (relevance) search                 |   ✅   | `/api/semantic-search`, `semantic.ts` (TF-IDF)                                                            |
 | Hybrid retrieval (RRF fusion)               |   ✅   | `/api/hybrid-search`, `hybrid_search` tool, `hybrid.ts` (`reciprocalRankFusion`)                          |
@@ -417,8 +434,8 @@ Legend: ✅ done · 🚧 in progress · ⬜ not started
 
 The link graph now has both backlinks and a **visual force-directed graph view**
 (the Graph tab + `/api/graph`). ◑ = quick switcher + split done;
-palette/outline/daily-notes open. † renderer shipped and lazy-loaded; Mermaid
-diagrams are the remaining follow-up (see roadmap).
+palette/outline/daily-notes open. † renderer shipped and lazy-loaded, now
+including **Mermaid diagrams** (fenced ` ```mermaid ` blocks render as SVG).
 
 ### For agents (the brain)
 
@@ -590,8 +607,21 @@ are optional enhancements, not part of the original plan:
     the `VaultIndex` cache already isolate callers from the engine, and the
     context-bundle endpoint consumes ranked chunks regardless of how they were
     scored. Persist the index across restarts as a follow-on.
-14. **Mermaid diagrams** — render fenced ` ```mermaid ` blocks in the preview
-    (the last renderer follow-up; the wikilink graph view above is done).
+14. **Mermaid diagrams.** ✅ **Done.** A fenced ` ```mermaid ` block renders as
+    an SVG diagram in the preview. The preview's `pre` renderer routes a
+    `language === 'mermaid'` fence to a new `MermaidDiagram` component
+    (`apps/web/src/components/MermaidDiagram.tsx`) instead of the highlight.js
+    code block. Mermaid is **dynamically imported** on first use (a single
+    module-level memoized load + `initialize`), so the ~600 KB library is
+    code-split out of the main and preview bundles and only fetched by notes that
+    actually contain a diagram. Theme follows `prefers-color-scheme`;
+    `securityLevel: 'strict'` sanitizes the (possibly agent-authored) diagram
+    source. While it loads — and if the diagram is invalid — the raw source is
+    shown in a `<pre>`, so a diagram never blanks the preview and always degrades
+    to legible text. Client-only, no runtime network. Tests:
+    `apps/web` `__tests__/MarkdownPreviewPane.mermaid.test.tsx` (mermaid mocked —
+    routing, SVG injection, error fallback, and a non-mermaid fence still
+    highlighting as code).
 
 #### Brain ideas (inspired by gbrain)
 
