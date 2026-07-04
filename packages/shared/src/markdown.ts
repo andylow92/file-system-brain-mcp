@@ -41,6 +41,54 @@ export interface ParsedNote extends ParsedFrontmatter {
 
 const FRONTMATTER_FENCE = /^---[ \t]*$/;
 
+/** Matches a frontmatter `key: value` line (minimal YAML subset). */
+export const FRONTMATTER_KEY_LINE = /^([A-Za-z0-9_-]+):[ \t]*(.*)$/;
+/** Matches a frontmatter block-list `- item` line. */
+export const FRONTMATTER_LIST_ITEM = /^[ \t]*-[ \t]+(.*)$/;
+
+/** The raw inner lines of a frontmatter block plus the remaining body. */
+export interface FrontmatterBlock {
+  /** Raw lines strictly between the opening and closing `---` fences. */
+  lines: string[];
+  /** Document body with the frontmatter block removed (leading newlines trimmed). */
+  body: string;
+}
+
+/**
+ * Locate a leading YAML frontmatter block and split it into its raw inner lines
+ * and the remaining body. Returns `null` when the document has no well-formed
+ * frontmatter (no opening fence, or an opening fence with no closing fence).
+ *
+ * This is the single place that knows the fence grammar; both the value parser
+ * (`parseFrontmatter`) and the graph's relation scanner
+ * (`extractFrontmatterRelations`) build on it, so the two never drift on how a
+ * frontmatter block is delimited. Line-level classification (`key:` vs `- item`)
+ * is shared via {@link FRONTMATTER_KEY_LINE} / {@link FRONTMATTER_LIST_ITEM}.
+ */
+export function splitFrontmatter(raw: string): FrontmatterBlock | null {
+  const lines = raw.split('\n');
+  if (lines.length === 0 || !FRONTMATTER_FENCE.test(lines[0])) {
+    return null;
+  }
+
+  let closingIndex = -1;
+  for (let i = 1; i < lines.length; i += 1) {
+    if (FRONTMATTER_FENCE.test(lines[i])) {
+      closingIndex = i;
+      break;
+    }
+  }
+  if (closingIndex === -1) {
+    return null;
+  }
+
+  const body = lines
+    .slice(closingIndex + 1)
+    .join('\n')
+    .replace(/^\n+/, '');
+  return { lines: lines.slice(1, closingIndex), body };
+}
+
 /**
  * Split a single wikilink inner token (without the surrounding brackets) into
  * its target, optional heading, and optional alias.
@@ -86,32 +134,17 @@ function stripCode(text: string): string {
  * body with the block removed when present.
  */
 export function parseFrontmatter(raw: string): ParsedFrontmatter {
-  const lines = raw.split('\n');
-
-  if (lines.length === 0 || !FRONTMATTER_FENCE.test(lines[0])) {
-    return { frontmatter: {}, body: raw, hasFrontmatter: false };
-  }
-
-  let closingIndex = -1;
-  for (let i = 1; i < lines.length; i += 1) {
-    if (FRONTMATTER_FENCE.test(lines[i])) {
-      closingIndex = i;
-      break;
-    }
-  }
-
-  if (closingIndex === -1) {
-    // No closing fence — treat the whole document as body.
+  const block = splitFrontmatter(raw);
+  if (!block) {
+    // No opening fence, or no closing fence — treat the whole document as body.
     return { frontmatter: {}, body: raw, hasFrontmatter: false };
   }
 
   const frontmatter: Record<string, string | string[]> = {};
   let pendingListKey: string | null = null;
 
-  for (let i = 1; i < closingIndex; i += 1) {
-    const line = lines[i];
-
-    const listItem = line.match(/^[ \t]*-[ \t]+(.*)$/);
+  for (const line of block.lines) {
+    const listItem = line.match(FRONTMATTER_LIST_ITEM);
     if (pendingListKey && listItem) {
       const arr = frontmatter[pendingListKey];
       const value = stripQuotes(listItem[1].trim());
@@ -123,7 +156,7 @@ export function parseFrontmatter(raw: string): ParsedFrontmatter {
       continue;
     }
 
-    const kv = line.match(/^([A-Za-z0-9_-]+):[ \t]*(.*)$/);
+    const kv = line.match(FRONTMATTER_KEY_LINE);
     if (!kv) {
       continue;
     }
@@ -159,11 +192,7 @@ export function parseFrontmatter(raw: string): ParsedFrontmatter {
     }
   }
 
-  const body = lines
-    .slice(closingIndex + 1)
-    .join('\n')
-    .replace(/^\n+/, '');
-  return { frontmatter, body, hasFrontmatter: true };
+  return { frontmatter, body: block.body, hasFrontmatter: true };
 }
 
 function stripQuotes(value: string): string {

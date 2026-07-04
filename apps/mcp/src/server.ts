@@ -449,7 +449,10 @@ function registerTools(server: McpServer, apiRequest: ReturnType<typeof createAp
     'get_graph',
     'Fetch the whole vault wikilink graph for traversal: `nodes` (id = note ' +
       'path, label, tags, unresolved? for missing link targets) and `edges` ' +
-      '(source, target, optional typed `type`). Use it to walk how notes connect.',
+      '(source, target, optional typed `type`). Edges come from body ' +
+      '`[[wikilinks]]` and self-wire from frontmatter: any field whose value ' +
+      'holds a `[[link]]` (e.g. `related: [[Foo]]`) becomes a typed edge with ' +
+      'the field name as `type`. Use it to walk how notes connect.',
     {},
     tool(async () => {
       return apiRequest<GraphData>('/api/graph');
