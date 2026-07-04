@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildGraph, type GraphDocument } from '@repo/shared';
+import { buildGraph, extractFrontmatterRelations, type GraphDocument } from '@repo/shared';
 
 describe('buildGraph', () => {
   it('builds nodes per note and edges per resolved wikilink', () => {
@@ -63,5 +63,116 @@ describe('buildGraph', () => {
     ]);
 
     expect(graph.edges).toEqual([{ source: 'a.md', target: 'c.md' }]);
+  });
+
+  it('self-wires typed edges from frontmatter fields (field name = relation)', () => {
+    const docs: GraphDocument[] = [
+      {
+        path: 'meeting.md',
+        content:
+          '---\ntype: meeting\nrelated: [[project]]\nattendees: [[alice]], [[bob]]\n---\n# Sync',
+      },
+      { path: 'project.md', content: '# Project' },
+      { path: 'alice.md', content: '# Alice' },
+      { path: 'bob.md', content: '# Bob' },
+    ];
+
+    const graph = buildGraph(docs);
+
+    // `related: [[project]]` -> typed `related` edge, no `rel:` discipline.
+    expect(graph.edges).toContainEqual({
+      source: 'meeting.md',
+      target: 'project.md',
+      type: 'related',
+    });
+    // Inline array under one field -> one typed edge per link.
+    expect(graph.edges).toContainEqual({
+      source: 'meeting.md',
+      target: 'alice.md',
+      type: 'attendees',
+    });
+    expect(graph.edges).toContainEqual({
+      source: 'meeting.md',
+      target: 'bob.md',
+      type: 'attendees',
+    });
+    // `type: meeting` is a plain scalar (no `[[...]]`) — never an edge.
+    expect(graph.edges.some((e) => e.type === 'meeting' || e.target === 'meeting')).toBe(false);
+  });
+
+  it('recognises YAML block-list relations and unresolved frontmatter targets', () => {
+    const docs: GraphDocument[] = [
+      {
+        path: 'idea.md',
+        content: '---\nrelated:\n  - "[[known]]"\n  - "[[missing]]"\n---\n# Idea',
+      },
+      { path: 'known.md', content: '# Known' },
+    ];
+
+    const graph = buildGraph(docs);
+
+    expect(graph.edges).toContainEqual({
+      source: 'idea.md',
+      target: 'known.md',
+      type: 'related',
+    });
+    // Unresolved frontmatter target becomes a placeholder node + typed edge.
+    expect(graph.nodes.find((n) => n.id === 'missing')).toMatchObject({
+      id: 'missing',
+      unresolved: true,
+    });
+    expect(graph.edges).toContainEqual({
+      source: 'idea.md',
+      target: 'missing',
+      type: 'related',
+    });
+  });
+
+  it('prefers a link-level rel: type over the frontmatter field name', () => {
+    const docs: GraphDocument[] = [
+      { path: 'a.md', content: '---\nsee: [[b|rel:supports]]\n---\n# A' },
+      { path: 'b.md', content: '# B' },
+    ];
+
+    const graph = buildGraph(docs);
+
+    expect(graph.edges).toContainEqual({ source: 'a.md', target: 'b.md', type: 'supports' });
+  });
+
+  it('can restore body-only edges (frontmatter links stay untyped) when disabled', () => {
+    const docs: GraphDocument[] = [
+      { path: 'a.md', content: '---\nrelated: [[b]]\n---\n# A' },
+      { path: 'b.md', content: '# B' },
+    ];
+
+    const withWiring = buildGraph(docs);
+    expect(withWiring.edges).toEqual([{ source: 'a.md', target: 'b.md', type: 'related' }]);
+
+    const bodyOnly = buildGraph(docs, { frontmatterRelations: false });
+    // The frontmatter link is scanned as a plain, untyped body edge.
+    expect(bodyOnly.edges).toEqual([{ source: 'a.md', target: 'b.md' }]);
+  });
+});
+
+describe('extractFrontmatterRelations', () => {
+  it('returns nothing when there is no frontmatter or no wikilink values', () => {
+    expect(extractFrontmatterRelations('# Just a body [[link]]')).toEqual([]);
+    expect(extractFrontmatterRelations('---\ntype: person\ntags: [a, b]\n---\nBody')).toEqual([]);
+  });
+
+  it('extracts one relation per link, keyed by the field name', () => {
+    const relations = extractFrontmatterRelations(
+      '---\nmentor: [[Jane]]\nrelated: [[Foo]], [[Bar]]\n---\nBody',
+    );
+
+    expect(relations).toEqual([
+      { target: 'Jane', type: 'mentor' },
+      { target: 'Foo', type: 'related' },
+      { target: 'Bar', type: 'related' },
+    ]);
+  });
+
+  it('ignores an unterminated frontmatter block', () => {
+    expect(extractFrontmatterRelations('---\nrelated: [[Foo]]\nno closing fence')).toEqual([]);
   });
 });

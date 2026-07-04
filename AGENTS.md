@@ -149,8 +149,12 @@ Done and on `main`-track (details + status tables in `docs/implementation.md`):
   traversal at `GET /api/graph` (and the `get_graph` MCP tool) as `GraphData`
   (`{ nodes: { id, label, tags, unresolved? }, edges: { source, target, type? } }`).
   It is built from the same link extraction as backlinks, served from the cached
-  index, and excludes `.fsbrain/`. The pure builder lives in `@repo/shared`
-  (`graph.ts`); the renderer (`apps/web` `KnowledgeGraph`) is lazy-loaded.
+  index, and excludes `.fsbrain/`. Edges **self-wire from frontmatter**: any
+  field whose value holds a `[[link]]` (e.g. `related: [[Foo]]`) becomes a typed
+  edge with the field name as `type` — no manual `[[Foo|rel:related]]` needed.
+  The pure builder lives in `@repo/shared` (`graph.ts`,
+  `extractFrontmatterRelations`); the renderer (`apps/web` `KnowledgeGraph`) is
+  lazy-loaded.
 - **MCP server** (`apps/mcp`) — a stdio server exposing 25 vault tools
   (`list_notes`, `read_note`, `read_block`, `get_block_anchors`,
   `create_note`, `update_note`, `patch_note`, `search_notes`,

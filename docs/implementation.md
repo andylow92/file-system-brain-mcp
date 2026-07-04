@@ -624,10 +624,26 @@ into infrastructure we already have rather than adding a new subsystem.
     synthesis. Tests: `apps/api` `__tests__/maintenance.test.ts` (pure) +
     `routes/maintenance.test.ts` (endpoint). _gbrain parallel: its 24/7 "dream
     cycle" that dedupes, fixes citations, and finds contradictions overnight._
-18. **Self-wiring typed graph edges.** Derive typed edges from frontmatter
-    (e.g. `related:`, `type:`) so the knowledge graph wires itself without manual
-    `[[Target|rel:type]]` discipline. _gbrain parallel: typed edges
-    (`works_at`, `attended`) auto-extracted on write, zero LLM calls._
+18. **Self-wiring typed graph edges.** ✅ **Done.** The knowledge graph now
+    derives typed edges from frontmatter: **any frontmatter field whose value
+    contains a `[[wikilink]]`** becomes a typed edge with the **field name as the
+    relation type** — so `related: [[Foo]]` wires a `related` edge with no manual
+    `[[Foo|rel:related]]` discipline in the body. The presence of `[[...]]` is
+    the signal, so plain scalar metadata (`type: person`, `tags: [a, b]`) is
+    skipped without a reserved-key list; a link that carries its own `rel:` type
+    keeps it, overriding the field name. Both inline
+    (`related: [[Foo]], [[Bar]]`) and YAML block-list forms are recognised.
+    Shipped as pure helpers in `@repo/shared` `graph.ts`
+    (`extractFrontmatterRelations`; `buildGraph` gains a `frontmatterRelations`
+    option, default on — `false` restores body-only edges). No new write path or
+    endpoint: `GET /api/graph` + the `get_graph` MCP tool serve the richer edges
+    from the same cached `VaultIndex`. `buildGraph` now scans the body with the
+    frontmatter stripped so a relation field isn't double-counted as a plain
+    body link. Tests: `apps/api` `__tests__/graph.test.ts` (pure: field-name
+    types, inline arrays, block lists, unresolved targets, `rel:` precedence,
+    opt-out) + `routes/graph.test.ts` (endpoint self-wiring). _gbrain parallel:
+    typed edges (`works_at`, `attended`) auto-extracted on write, zero LLM
+    calls._
 19. **Schema packs / typed page types.** Canonical frontmatter `type:` values
     (person, meeting, idea…) with allowed relationships — powers graph node
     colouring, validation, and retrieval boosting. _gbrain parallel:

@@ -96,6 +96,29 @@ describe('GET /api/graph', () => {
     });
   });
 
+  it('self-wires typed edges from frontmatter relation fields', async () => {
+    await api('POST', '/api/file', {
+      body: {
+        path: 'meeting.md',
+        content: '---\ntype: meeting\nrelated: [[project]]\n---\n# Weekly sync',
+      },
+    });
+    await api('POST', '/api/file', { body: { path: 'project.md', content: '# Project' } });
+
+    const result = await api<GraphData>('GET', '/api/graph');
+    expect(result.status).toBe(200);
+    const graph = result.body.data!;
+
+    // The `related:` frontmatter field wires a typed edge with no `rel:` alias.
+    expect(graph.edges).toContainEqual({
+      source: 'meeting.md',
+      target: 'project.md',
+      type: 'related',
+    });
+    // The `type: meeting` scalar is metadata, not a link — never an edge/node.
+    expect(graph.nodes.some((node) => node.id === 'meeting')).toBe(false);
+  });
+
   it('reflects a newly written link without serving a stale cached graph', async () => {
     await api('POST', '/api/file', { body: { path: 'one.md', content: '# One' } });
     await api('POST', '/api/file', { body: { path: 'two.md', content: '# Two' } });

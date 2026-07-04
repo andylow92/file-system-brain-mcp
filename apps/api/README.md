@@ -229,6 +229,13 @@ vault re-read). `.fsbrain/` is excluded. Read-only (emits no `VaultEvent`).
 - `edges`: `{ source, target, type? }`. `source`/`target` are node ids;
   `type` carries the typed relation from `[[Target|rel:supports]]` when present.
   Self-links and duplicate edges are dropped.
+- **Self-wiring from frontmatter.** Any frontmatter field whose value contains a
+  `[[wikilink]]` becomes a typed edge with the **field name as `type`** — so
+  `related: [[Foo]]` yields `{ source, target: "Foo.md", type: "related" }` with
+  no manual `[[Foo|rel:related]]` in the body. Presence of `[[...]]` is the
+  signal, so plain scalars (`type: person`, `tags: [a, b]`) never wire an edge; a
+  link carrying its own `rel:` type overrides the field name. Inline
+  (`related: [[Foo]], [[Bar]]`) and YAML block-list forms are both recognised.
 
 ```json
 {
