@@ -32,8 +32,8 @@ knowledge: notes with `type: skill` frontmatter (optional `name:` /
   Review tab like any proposal.
 
 Over time the agent distills its own successful workflows into reusable,
-human-audited playbooks. Pairs naturally with backlog #19 (schema packs) —
-`skill` becomes one of the canonical types.
+human-audited playbooks. Pairs naturally with backlog #19 (schema packs, now
+shipped) — `skill` is one of the canonical page types in `DEFAULT_SCHEMA_PACK`.
 
 ## 2. Learn from the review queue
 

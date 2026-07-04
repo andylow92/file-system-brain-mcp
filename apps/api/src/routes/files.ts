@@ -23,6 +23,7 @@ import type {
   ThresholdRecommendation,
   ScanFeedbackOptions,
   ScanVaultOptions,
+  SchemaPack,
   SearchMatch,
   VaultEvent,
 } from '@repo/shared';
@@ -44,6 +45,7 @@ import {
   findTextMatch,
   listSkills,
   DEFAULT_DUPLICATE_THRESHOLD,
+  DEFAULT_SCHEMA_PACK,
   parseFrontmatter,
   parseNote,
   reciprocalRankFusion,
@@ -422,6 +424,20 @@ async function handleGetGraph({ res, vaultIndex }: RequestContext): Promise<void
   const documents = await vaultIndex.getDocuments();
   const graph = buildGraph(documents);
   sendJson(res, 200, { success: true, data: graph });
+}
+
+/**
+ * GET /api/schema — return the vault's **schema pack**: the canonical `type:`
+ * values with their colours and allowed typed relations. Static (the built-in
+ * pack), so it needs no vault read; agents use it to author well-typed notes and
+ * the graph view uses the colours. Validation against it surfaces as `schema`
+ * maintenance findings, not here.
+ */
+async function handleGetSchema({ res }: RequestContext): Promise<void> {
+  sendJson<{ pageTypes: SchemaPack }>(res, 200, {
+    success: true,
+    data: { pageTypes: DEFAULT_SCHEMA_PACK },
+  });
 }
 
 interface BlockResponse {
@@ -1545,6 +1561,7 @@ export async function runMaintenanceScan(deps: {
   const findings = scanVault(documents, {
     now: new Date().toISOString(),
     modifiedAt,
+    schemaPack: DEFAULT_SCHEMA_PACK,
     ...deps.options,
     duplicateThreshold,
   });
@@ -1607,7 +1624,11 @@ async function handleMaintenancePreview({
     pathResolver,
     documents.map((doc) => doc.path),
   );
-  const findings = scanVault(documents, { now: new Date().toISOString(), modifiedAt });
+  const findings = scanVault(documents, {
+    now: new Date().toISOString(),
+    modifiedAt,
+    schemaPack: DEFAULT_SCHEMA_PACK,
+  });
   sendJson<{ findings: MaintenanceFinding[] }>(res, 200, { success: true, data: { findings } });
 }
 
@@ -1776,6 +1797,11 @@ export async function handleFileRoutes(
 
   if (req.method === 'GET' && url.pathname === '/api/graph') {
     await executeHandler(context, handleGetGraph);
+    return { handled: true };
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/schema') {
+    await executeHandler(context, handleGetSchema);
     return { handled: true };
   }
 

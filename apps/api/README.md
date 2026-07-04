@@ -222,10 +222,13 @@ Returns the whole vault wikilink graph — `GraphData`
 resolution as `/api/backlinks`, served from the cached index (no per-call
 vault re-read). `.fsbrain/` is excluded. Read-only (emits no `VaultEvent`).
 
-- `nodes`: `{ id, label, tags, unresolved? }`. A real note's `id` is its logical
-  path; `label` is the basename without `.md`. An unresolved link target (a
-  `[[wikilink]]` that resolves to no note) is included as a distinct placeholder
-  node with `unresolved: true` and empty `tags`.
+- `nodes`: `{ id, label, tags, type?, unresolved? }`. A real note's `id` is its
+  logical path; `label` is the basename without `.md`. `type` is the note's
+  declared frontmatter `type:` (normalized to lowercase, e.g. `person`), present
+  only for real notes that declare one — resolve it to a colour/label via the
+  schema pack (`GET /api/schema`). An unresolved link target (a `[[wikilink]]`
+  that resolves to no note) is included as a distinct placeholder node with
+  `unresolved: true` and empty `tags`.
 - `edges`: `{ source, target, type? }`. `source`/`target` are node ids;
   `type` carries the typed relation from `[[Target|rel:supports]]` when present.
   Self-links and duplicate edges are dropped. When a pair is connected by both a
@@ -250,6 +253,39 @@ vault re-read). `.fsbrain/` is excluded. Read-only (emits no `VaultEvent`).
   "edges": [
     { "source": "claim.md", "target": "evidence.md", "type": "supports" },
     { "source": "claim.md", "target": "ghost" }
+  ]
+}
+```
+
+### `GET /api/schema`
+
+Returns the vault's **schema pack** — `{ pageTypes }` — the canonical note
+`type:` values with their colours and allowed typed relations. Static (the
+built-in `DEFAULT_SCHEMA_PACK`), so it takes no vault read and emits no
+`VaultEvent`. Agents use it to author well-typed notes; the Graph view uses the
+colours; the dream-cycle maintenance scan validates notes against it and reports
+violations as report-only `schema` findings (it never auto-edits frontmatter).
+
+- `pageTypes`: `{ type, label, color, description, relations }[]`. `type` is the
+  canonical (lowercase) `type:` value; `relations` is `{ name, targetTypes?,
+description? }[]` — the typed **frontmatter** relations a note of that type may
+  declare, with an optional allowed target-type constraint. Every type allows the
+  universal `related` association.
+
+```json
+{
+  "pageTypes": [
+    {
+      "type": "meeting",
+      "label": "Meeting",
+      "color": "#b58bc4",
+      "description": "Notes from a meeting or call.",
+      "relations": [
+        { "name": "related" },
+        { "name": "attendees", "targetTypes": ["person"] },
+        { "name": "about", "targetTypes": ["topic", "project"] }
+      ]
+    }
   ]
 }
 ```
@@ -588,6 +624,11 @@ above. It runs fully offline (no model, no API key) over the cached `VaultIndex`
   and per-note mtimes (`modifiedAt`); a note with no readable mtime is never
   flagged. (Reads aren't logged, so inbound-citation count is the deterministic
   stand-in for "how often retrieved".)
+- `schema` — a note that violates the **schema pack** (`GET /api/schema`): an
+  unknown `type:`, a **frontmatter** relation the type is not allowed to declare,
+  or a relation pointing at the wrong kind of note. Report-only (no suggestion) —
+  the fix is a human editing frontmatter. The server passes `DEFAULT_SCHEMA_PACK`
+  to `scanVault`; the validation itself is pure (`schema.ts` `validateVault`).
 
 Each finding is `{ kind, paths, detail, score?, suggestion? }`, where
 `suggestion` (when present) is a safe, reversible `{ action, path, content?,

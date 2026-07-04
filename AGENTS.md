@@ -56,6 +56,7 @@ the in-process API. Pick the tool that matches your intent:
 | Cited answer kit + offline gap analysis                | `think`             | `GET /api/think`             |
 | Backlinks (incl. `rel:` type)                          | `get_backlinks`     | `GET /api/backlinks`         |
 | Whole vault wikilink graph                             | `get_graph`         | `GET /api/graph`             |
+| Schema pack (canonical `type:`s + relations)           | `schema_pack`       | `GET /api/schema`            |
 | Recent provenance / audit trail                        | `recent_activity`   | `GET /api/audit`             |
 | Question log + recurring knowledge gaps                | `recent_questions`  | `GET /api/questions`         |
 | Create a folder                                        | `create_folder`     | `POST /api/dir`              |
@@ -155,13 +156,13 @@ Done and on `main`-track (details + status tables in `docs/implementation.md`):
   The pure builder lives in `@repo/shared` (`graph.ts`,
   `extractFrontmatterRelations`); the renderer (`apps/web` `KnowledgeGraph`) is
   lazy-loaded.
-- **MCP server** (`apps/mcp`) — a stdio server exposing 25 vault tools
+- **MCP server** (`apps/mcp`) — a stdio server exposing 26 vault tools
   (`list_notes`, `read_note`, `read_block`, `get_block_anchors`,
   `create_note`, `update_note`, `patch_note`, `search_notes`,
   `semantic_search`, `hybrid_search`, `get_context`, `think`, `get_backlinks`,
-  `get_graph`, `recent_activity`, `recent_questions`, `create_folder`,
-  `move_path`, `delete_path`, `propose_edit`, `list_proposals`, `proposal_stats`,
-  `list_skills`, `run_maintenance`, `run_feedback`). It runs
+  `get_graph`, `schema_pack`, `recent_activity`, `recent_questions`,
+  `create_folder`, `move_path`, `delete_path`, `propose_edit`, `list_proposals`,
+  `proposal_stats`, `list_skills`, `run_maintenance`, `run_feedback`). It runs
   the storage API **in-process** by default, so it is a single
   self-contained command an MCP host (OpenClaw, Claude Desktop, Claude
   Code, Cursor) can spawn — `npm run start:agent` from the repo root, or
@@ -217,9 +218,10 @@ tools=… · actor=…`) so a host log immediately shows whether the spawn
 - **Dream-cycle maintenance** — a deterministic, offline scan
   (`@repo/shared` `maintenance.ts`, `scanVault`) finds vault-hygiene problems —
   **broken `[[wikilinks]]`**, **orphan notes**, **near-duplicate notes**
-  (note-level TF-IDF cosine), and **stale-but-load-bearing notes** (heavily
+  (note-level TF-IDF cosine), **stale-but-load-bearing notes** (heavily
   linked yet unchanged for > 90 days — report-only, "is this still accurate?";
-  the route feeds `scanVault` per-note mtimes + a `now` reference) — and files
+  the route feeds `scanVault` per-note mtimes + a `now` reference), and
+  **schema violations** (report-only; see "Schema packs" below) — and files
   each actionable one as an **edit proposal** the human approves in the Review
   tab (reusing the `ProposalStore` + `EventBus`). `GET /api/maintenance`
   previews; `POST /api/maintenance/scan` (and the `run_maintenance` MCP tool)
@@ -249,6 +251,20 @@ tools=… · actor=…`) so a host log immediately shows whether the spawn
   non-trivial task, and propose a skill note after learning a reusable
   procedure.** Pure helpers in `@repo/shared` (`skills.ts` — `parseSkill`,
   `listSkills`).
+- **Schema packs — typed page types** — `@repo/shared` `schema.ts`
+  (`DEFAULT_SCHEMA_PACK`) defines canonical note `type:` values (person,
+  meeting, project, idea…), each with a colour and the typed **frontmatter**
+  relations it may declare (`meeting.attendees → person`, `project.owner →
+person`). `GET /api/schema` (and the `schema_pack` MCP tool) returns
+  `{ pageTypes }`. Three payoffs off metadata the vault already stores: the
+  Graph view **colours** a node by its `type` (schema colour wins over first
+  tag); `validateVault` **flags** an unknown type or a disallowed/mis-targeted
+  relation as a report-only `schema` maintenance finding for human review; and
+  the pack lets agents author **well-typed** notes. If you are an agent:
+  **consult `schema_pack` before creating or editing a note** so you pick a
+  canonical `type:` and only wire relations that type permits. All
+  pure/offline; retrieval boosting on the same metadata is a documented
+  follow-on, not wired yet.
 - **Question log — demand-driven gaps** — every `think` query is persisted
   with its offline gap signal (`weakCoverage` + `uncoveredTerms`) to
   `CONTENT_ROOT/.fsbrain/questions.jsonl`, beside the audit log.

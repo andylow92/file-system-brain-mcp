@@ -39,6 +39,7 @@ import type {
   HybridHit,
   KnowledgeGap,
   MaintenanceFinding,
+  PageType,
   QuestionEntry,
   SearchMatch,
   SemanticHit,
@@ -448,14 +449,32 @@ function registerTools(server: McpServer, apiRequest: ReturnType<typeof createAp
   register(
     'get_graph',
     'Fetch the whole vault wikilink graph for traversal: `nodes` (id = note ' +
-      'path, label, tags, unresolved? for missing link targets) and `edges` ' +
-      '(source, target, optional typed `type`). Edges come from body ' +
-      '`[[wikilinks]]` and self-wire from frontmatter: any field whose value ' +
-      'holds a `[[link]]` (e.g. `related: [[Foo]]`) becomes a typed edge with ' +
-      'the field name as `type`. Use it to walk how notes connect.',
+      "path, label, tags, optional canonical `type` = the note's frontmatter " +
+      'page type, unresolved? for missing link targets) and `edges` (source, ' +
+      'target, optional typed `type`). Edges come from body `[[wikilinks]]` and ' +
+      'self-wire from frontmatter: any field whose value holds a `[[link]]` ' +
+      '(e.g. `related: [[Foo]]`) becomes a typed edge with the field name as ' +
+      '`type`. Use it to walk how notes connect. See `schema_pack` for the ' +
+      'canonical node types.',
     {},
     tool(async () => {
       return apiRequest<GraphData>('/api/graph');
+    }),
+  );
+
+  register(
+    'schema_pack',
+    "Fetch the vault's **schema pack**: the canonical note `type:` values " +
+      '(person, meeting, project, idea…), each with a colour and the typed ' +
+      'frontmatter relations it may declare (e.g. a `meeting` allows ' +
+      '`attendees: [[Person]]`, `about: [[Topic]]`). Consult it before authoring ' +
+      'or editing a note so you pick a canonical `type:` and only wire relations ' +
+      'that type permits — the dream-cycle maintenance scan reports notes that ' +
+      'declare an unknown type or a disallowed/mis-targeted relation as `schema` ' +
+      'findings for human review. Returns { pageTypes }.',
+    {},
+    tool(async () => {
+      return apiRequest<{ pageTypes: PageType[] }>('/api/schema');
     }),
   );
 

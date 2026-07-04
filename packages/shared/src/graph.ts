@@ -38,6 +38,13 @@ export interface GraphNode {
   label: string;
   /** Tags declared by the note (frontmatter + inline `#tags`); empty for placeholders. */
   tags: string[];
+  /**
+   * The note's declared frontmatter `type:`, normalized to lowercase (e.g.
+   * `person`). Present only for real notes that declare one; a consumer resolves
+   * it to a colour/label via the schema pack's `getPageType`. Absent for untyped
+   * notes and placeholders.
+   */
+  type?: string;
   /** True when this node is an unresolved link target, not a real note on disk. */
   unresolved?: boolean;
 }
@@ -144,6 +151,20 @@ function labelForPath(id: string): string {
 }
 
 /**
+ * A note's declared frontmatter `type:`, normalized to lowercase, or undefined.
+ * Read here (rather than via the schema module) so the graph stays a leaf of the
+ * dependency tree — the schema pack is applied by the *consumer* for colouring.
+ */
+function nodeType(content: string): string | undefined {
+  const type = parseFrontmatter(content).frontmatter['type'];
+  if (typeof type !== 'string') {
+    return undefined;
+  }
+  const normalized = type.trim().toLowerCase();
+  return normalized || undefined;
+}
+
+/**
  * Build the wikilink graph from a corpus of notes. Every note becomes a node;
  * every resolved `[[wikilink]]` becomes an edge to the linked note; every
  * unresolved link becomes an edge to a placeholder node (`unresolved: true`).
@@ -167,10 +188,12 @@ export function buildGraph(
   // A node for every real note first, so a later unresolved target can never
   // shadow a real note (and tags are always attached to the real note).
   for (const doc of documents) {
+    const type = nodeType(doc.content);
     nodes.set(doc.path, {
       id: doc.path,
       label: labelForPath(doc.path),
       tags: extractTags(doc.content),
+      ...(type ? { type } : {}),
     });
   }
 

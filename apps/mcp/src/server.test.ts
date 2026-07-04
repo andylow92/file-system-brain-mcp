@@ -83,6 +83,7 @@ describe('mcp server (self-contained)', () => {
           'recent_questions',
           'run_feedback',
           'run_maintenance',
+          'schema_pack',
           'search_notes',
           'semantic_search',
           'think',
