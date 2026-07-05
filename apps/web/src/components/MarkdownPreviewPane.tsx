@@ -7,6 +7,7 @@ import hljs from 'highlight.js/lib/common';
 import { parseNote, resolveWikilink } from '@repo/shared';
 import { remarkWikilinks } from '../markdown/remarkWikilinks';
 import { BLOCK_ANCHOR_PREFIX, remarkBlockAnchors } from '../markdown/remarkBlockAnchors';
+import { MermaidDiagram } from './MermaidDiagram';
 import 'highlight.js/styles/github-dark.css';
 import 'katex/dist/katex.min.css';
 
@@ -243,6 +244,10 @@ export function MarkdownPreviewPane({
         };
         const language = /language-(\w+)/.exec(codeProps.className ?? '')?.[1];
         const value = nodeToText(codeProps.children).replace(/\n$/, '');
+        // A ```mermaid fence renders as a diagram instead of a code block.
+        if (language === 'mermaid') {
+          return <MermaidDiagram code={value} />;
+        }
         return <CodeBlock value={value} language={language} />;
       },
     }),

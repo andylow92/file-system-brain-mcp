@@ -94,8 +94,10 @@ Done and on `main`-track (details + status tables in `docs/implementation.md`):
 - **Rich rendering** — the preview uses `react-markdown` + `remark-gfm`
   (tables, task lists, strikethrough, autolinks, h3–h6), `remark-math` +
   `rehype-katex` (math), and highlight.js for fenced code (with a copy button).
-  Frontmatter is stripped and tags render as chips. Wikilinks are a remark
-  plugin (`apps/web/src/markdown/remarkWikilinks.ts`).
+  A fenced ` ```mermaid ` block renders as an **SVG diagram** (`MermaidDiagram`,
+  mermaid lazy-imported so it stays out of the main bundle; degrades to source
+  on error). Frontmatter is stripped and tags render as chips. Wikilinks are a
+  remark plugin (`apps/web/src/markdown/remarkWikilinks.ts`).
 - **Search** — full-text + tag search (`GET /api/search`), **semantic
   (relevance) search** (`GET /api/semantic-search`, TF-IDF cosine over chunked
   notes; `semantic.ts`), and **hybrid retrieval** (`GET /api/hybrid-search`)
@@ -288,9 +290,9 @@ person`). `GET /api/schema` (and the `schema_pack` MCP tool) returns
   draft is ever posted or sent; the lesson is a mechanical summary, not an
   LLM-written rule (on-demand by default, optional `FEEDBACK_INTERVAL_MS` timer).
 
-**Not yet built (next):** Mermaid diagrams and real vector embeddings to back
-semantic search (the cached index + context bundle endpoint above are the seam
-for it). See the roadmap in `docs/implementation.md`.
+**Not yet built (next):** real vector embeddings to back semantic search (the
+cached index + context bundle endpoint above are the seam for it). See the
+roadmap in `docs/implementation.md`.
 
 ---
 

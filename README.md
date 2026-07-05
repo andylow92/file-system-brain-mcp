@@ -326,7 +326,8 @@ See the full deployment examples in this README’s history and backend docs.
 - ✅ Cited answers + offline gap analysis (`think`) and dream-cycle maintenance
 - ✅ Self-improving outreach **feedback loop** — learns your voice from draft→final edits
 - ✅ Typed page types / **schema packs** — canonical `type:`s, graph colouring, validation
-- Mermaid diagrams + real vector embeddings (the cached index is the seam)
+- ✅ Mermaid diagrams — fenced ` ```mermaid ` blocks render as SVG in the preview
+- Real vector embeddings (the cached index is the seam)
 - Git sync workflows
 - Multi-user auth + permissions
 - Real-time collaborative editing
