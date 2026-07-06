@@ -243,11 +243,26 @@ For `apps/api`:
   - Set `CONTENT_ROOT=./content` to keep an older clone's location.
 - `PORT`
   - API server port (default: `3001`).
+- `FSBRAIN_EMBEDDINGS`
+  - Opt-in switch for the **embedding** retrieval engine. Off by default
+    (`1`/`true`/`on`/`yes` turns it on); when off, semantic search uses the
+    fully-offline TF-IDF engine — no network, no key, exactly as before.
+  - When on, needs a key: `EMBEDDINGS_API_KEY` (falls back to
+    `OPENROUTER_API_KEY`). If the provider is unreachable or misconfigured,
+    retrieval automatically falls back to TF-IDF, so "off" is always a working
+    search — flip the flag off and restart to revert entirely.
+  - Optional overrides: `EMBEDDINGS_MODEL` (default
+    `openai/text-embedding-3-small`), `EMBEDDINGS_URL` (any OpenAI-compatible
+    `/v1/embeddings` endpoint; default OpenRouter), `EMBEDDINGS_BATCH_SIZE`
+    (default `96`).
 
 Example:
 
 ```bash
 CONTENT_ROOT=/absolute/path/to/vault PORT=3001 npm run dev:api
+
+# Opt into embedding-based semantic search:
+FSBRAIN_EMBEDDINGS=on EMBEDDINGS_API_KEY=sk-... npm run dev:api
 ```
 
 ---
