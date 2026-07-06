@@ -8,8 +8,7 @@ import {
 import type { EventBus } from '../events/eventBus.js';
 import type { FileRepository, TreeNode } from '../storage/fileRepository.js';
 import {
-  createRetrievalEngine,
-  resolveEmbedFn,
+  resolveRetrievalEngine,
   type BuiltRetrievalIndex,
   type RetrievalEngine,
 } from './retrievalEngine.js';
@@ -63,6 +62,8 @@ function flattenMarkdownPaths(nodes: TreeNode[]): string[] {
 export function createVaultIndex(options: {
   repository: FileRepository;
   eventBus: EventBus;
+  /** Vault root, used to persist the embedding index under `.fsbrain/`. */
+  contentRoot?: string;
   /** Ranking engine; defaults to the env-selected engine (TF-IDF unless
    * `FSBRAIN_EMBEDDINGS` is on). Injectable for tests. */
   engine?: RetrievalEngine;
@@ -70,8 +71,8 @@ export function createVaultIndex(options: {
   const { repository, eventBus } = options;
   const engine =
     options.engine ??
-    createRetrievalEngine({
-      embed: resolveEmbedFn(),
+    resolveRetrievalEngine({
+      contentRoot: options.contentRoot,
       onFallback: (reason, error) => {
         // eslint-disable-next-line no-console
         console.warn(`[vaultIndex] embeddings ${reason} fallback to TF-IDF:`, error);

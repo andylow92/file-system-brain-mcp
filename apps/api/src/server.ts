@@ -38,7 +38,7 @@ export function createServer(config = loadConfig()): http.Server {
   // A cached retrieval index so search / semantic / context don't re-read the
   // whole vault per query. It subscribes to the same bus, so any write (API or
   // out-of-band) invalidates it and the next query rebuilds — never stale.
-  const vaultIndex = createVaultIndex({ repository, eventBus });
+  const vaultIndex = createVaultIndex({ repository, eventBus, contentRoot: config.contentRoot });
 
   // Optional "dream cycle": when MAINTENANCE_INTERVAL_MS is a positive number,
   // periodically scan the vault for hygiene problems (broken links, orphans,

@@ -5,7 +5,32 @@
 > Keep it accurate: update the status tables when you finish a unit of work.
 > Routed from [`AGENTS.md`](../AGENTS.md).
 
-_Last updated: 2026-07-06 (opt-in embeddings engine)_
+_Last updated: 2026-07-06 (embeddings + persisted index)_
+
+> **Latest change.** **Persisted embedding index.** The opt-in embedding engine
+> now **survives restarts** instead of re-embedding the whole vault on every
+> boot. Chunk vectors are cached content-addressed (sha-256 of the chunk's
+> embeddable text → vector) and persisted to `<CONTENT_ROOT>/.fsbrain/embeddings.json`
+> beside the audit / question logs. On startup the engine seeds its in-memory
+> cache from that file, so a reboot re-embeds **only chunks whose text changed**;
+> keying by content (not path) means a moved or renamed note keeps its vectors.
+> The file records the embedding `model`, and loading under a different model
+> discards everything (the vector spaces are incompatible) rather than mixing
+> them — the clean invalidation path when you switch models. Writes are **atomic**
+> (temp file + rename) and the store is **pruned to the live corpus** on each
+> save, so it can't grow unbounded or leave a torn file. Everything stays
+> **best-effort**: a missing / corrupt / wrong-model / wrong-version file loads as
+> empty, and a save failure just means a colder cache next boot — never a failed
+> build. Pure fs I/O in `apps/api/src/embeddings/vectorStore.ts` (`VectorStore`,
+> `createFileVectorStore`), wired through `resolveRetrievalEngine(contentRoot)` →
+> `createEmbeddingsEngine(embed, { store, model })`; the `VaultIndex` gains a
+> `contentRoot` option and the server passes it. TF-IDF (the default) is
+> unaffected — it has no vectors to persist. Tests: `apps/api`
+> `__tests__/vectorStore.test.ts` (round-trip, model-mismatch discard, corrupt /
+> malformed tolerance, atomic overwrite) + persistence cases in
+> `__tests__/retrievalEngine.test.ts` (seed-avoids-re-embed across engine
+> instances, model-change re-embed, no-op-rebuild skips the write, store-throws
+> never fails a build).
 
 > **Latest change.** **Real embeddings** (backlog #13) — an **opt-in** vector
 > engine behind the existing `documents → ranked` seam, with TF-IDF staying the
@@ -419,6 +444,7 @@ Key facts an agent must know:
 | Full-text + tag search (Ctrl/Cmd-K)         |   ✅   | `/api/search`, `SearchDialog`                                                                             |
 | Semantic (relevance) search                 |   ✅   | `/api/semantic-search`, `semantic.ts` (TF-IDF); opt-in embeddings via `FSBRAIN_EMBEDDINGS`                |
 | Pluggable retrieval engine (TF-IDF ↔ embed) |   ✅   | `index/retrievalEngine.ts`, `embeddings.ts`, `embeddings/`; env toggle + TF-IDF fallback                  |
+| Persisted embedding index (across restarts) |   ✅   | `embeddings/vectorStore.ts` → `.fsbrain/embeddings.json`; content-addressed, model-tagged, atomic         |
 | Hybrid retrieval (RRF fusion)               |   ✅   | `/api/hybrid-search`, `hybrid_search` tool, `hybrid.ts` (`reciprocalRankFusion`)                          |
 | `think` (cited answers + offline gaps)      |   ✅   | `/api/think`, `think` tool, `think.ts` (`assembleAnswerKit`)                                              |
 | Dream-cycle maintenance → proposals         |   ✅   | `/api/maintenance[/scan]`, `run_maintenance`, `maintenance.ts` (`scanVault`)                              |
@@ -633,10 +659,11 @@ polish, mobile, and multi-device sync are **explicitly deprioritized** for now.
 The planned roadmap is complete, and with schema packs (#19) shipped the entire
 gbrain-inspired "Brain ideas" sequence (#15–22) is done too. Both original
 enhancement items (real embeddings #13, Mermaid diagrams #14) have now shipped as
-well; what remains are their follow-ons — persisting the embedding index across
-restarts and evaluating it through the eval harness (#20) — plus implicit
-relevance feedback (#4 in [`improvement-ideas.md`](improvement-ideas.md)). These
-are optional, not part of the original plan:
+well, and the embedding index now persists across restarts too; what remains is
+evaluating that engine through the eval harness (#20) against a configured
+provider, plus implicit relevance feedback (#4 in
+[`improvement-ideas.md`](improvement-ideas.md)). These are optional, not part of
+the original plan:
 
 13. **Real embeddings** (the remaining half of RAG). ✅ **Done (opt-in).** A
     pluggable retrieval-engine seam (`apps/api/src/index/retrievalEngine.ts`)
@@ -651,11 +678,14 @@ are optional, not part of the original plan:
     guarantee — enabled by a single env var (`FSBRAIN_EMBEDDINGS`) plus a key
     (`EMBEDDINGS_API_KEY`, else `OPENROUTER_API_KEY`) — and a resilient wrapper
     **falls back to TF-IDF** on any provider failure so "off" is always a working
-    search. Chunk-vector and query-vector caches bound the API cost. **Persisting
-    the index across restarts remains the follow-on**, as does evaluating the
-    embedding engine through the retrieval-eval harness (#20) against a configured
-    provider. Tests: `apps/api` `__tests__/embeddings.test.ts` +
-    `__tests__/retrievalEngine.test.ts`.
+    search. Chunk-vector and query-vector caches bound the API cost, and the
+    chunk cache is **persisted across restarts** (content-addressed, model-tagged,
+    atomic, best-effort) to `<CONTENT_ROOT>/.fsbrain/embeddings.json` so a reboot
+    re-embeds only changed chunks (`embeddings/vectorStore.ts`). Still open:
+    evaluating the embedding engine through the retrieval-eval harness (#20)
+    against a configured provider. Tests: `apps/api`
+    `__tests__/embeddings.test.ts`, `__tests__/retrievalEngine.test.ts`,
+    `__tests__/vectorStore.test.ts`.
 14. **Mermaid diagrams.** ✅ **Done.** A fenced ` ```mermaid ` block renders as
     an SVG diagram in the preview. The preview's `pre` renderer routes a
     `language === 'mermaid'` fence to a new `MermaidDiagram` component

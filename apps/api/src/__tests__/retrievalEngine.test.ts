@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { EmbedFn } from '../embeddings/client.js';
 import { loadEmbeddingConfig } from '../embeddings/config.js';
+import type { VectorStore } from '../embeddings/vectorStore.js';
 import {
   createEmbeddingsEngine,
   createResilientEngine,
@@ -9,6 +10,25 @@ import {
   createTfidfEngine,
   resolveEmbedFn,
 } from '../index/retrievalEngine.js';
+
+/** An in-memory VectorStore that survives across "restarts" (new engine
+ * instances) and records how many times it was saved. */
+function makeMemoryStore(): VectorStore & { readonly saves: number } {
+  let saved: { model: string; vectors: Map<string, number[]> } | null = null;
+  let saves = 0;
+  return {
+    get saves() {
+      return saves;
+    },
+    async load(model) {
+      return saved && saved.model === model ? new Map(saved.vectors) : new Map();
+    },
+    async save(model, vectors) {
+      saves += 1;
+      saved = { model, vectors: new Map(vectors) };
+    },
+  };
+}
 
 const DOCS = [
   { path: 'cats.md', content: '# Cats\nfelines purr and hunt' },
@@ -74,6 +94,58 @@ describe('createEmbeddingsEngine', () => {
     // Rebuild the same corpus → no chunk re-embedding (all cached).
     await engine.build(DOCS);
     expect(calls.length).toBe(2);
+  });
+});
+
+describe('createEmbeddingsEngine persistence', () => {
+  it('seeds from the store so a restart re-embeds nothing unchanged', async () => {
+    const store = makeMemoryStore();
+
+    // First "process": embeds the 2 chunks and persists them.
+    const first = makeMockEmbed();
+    const engineA = createEmbeddingsEngine(first.embed, { store, model: 'm1' });
+    await engineA.build(DOCS);
+    expect(first.calls).toHaveLength(1); // one chunk-embedding batch
+    expect(store.saves).toBe(1);
+
+    // Second "process": a fresh engine over the same store must not re-embed.
+    const second = makeMockEmbed();
+    const engineB = createEmbeddingsEngine(second.embed, { store, model: 'm1' });
+    const index = await engineB.build(DOCS);
+    expect(second.calls).toHaveLength(0); // seeded entirely from the store
+    // ...and still ranks correctly off the seeded vectors.
+    expect((await index.queryRanked('kitten', {}))[0]?.path).toBe('cats.md');
+  });
+
+  it('re-embeds when the model changes (incompatible vectors)', async () => {
+    const store = makeMemoryStore();
+    const first = makeMockEmbed();
+    await createEmbeddingsEngine(first.embed, { store, model: 'm1' }).build(DOCS);
+
+    const second = makeMockEmbed();
+    await createEmbeddingsEngine(second.embed, { store, model: 'm2' }).build(DOCS);
+    expect(second.calls).toHaveLength(1); // model mismatch → nothing seeded
+  });
+
+  it('does not write to the store on a no-op rebuild', async () => {
+    const store = makeMemoryStore();
+    const { embed } = makeMockEmbed();
+    const engine = createEmbeddingsEngine(embed, { store, model: 'm1' });
+    await engine.build(DOCS);
+    expect(store.saves).toBe(1);
+    await engine.build(DOCS); // same corpus, nothing changed
+    expect(store.saves).toBe(1);
+  });
+
+  it('never fails a build when the store throws', async () => {
+    const flakyStore: VectorStore = {
+      load: () => Promise.reject(new Error('read fail')),
+      save: () => Promise.reject(new Error('write fail')),
+    };
+    const { embed } = makeMockEmbed();
+    const engine = createEmbeddingsEngine(embed, { store: flakyStore, model: 'm1' });
+    const index = await engine.build(DOCS);
+    expect((await index.queryRanked('kitten', {}))[0]?.path).toBe('cats.md');
   });
 });
 

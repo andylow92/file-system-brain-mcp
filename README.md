@@ -255,6 +255,10 @@ For `apps/api`:
     `openai/text-embedding-3-small`), `EMBEDDINGS_URL` (any OpenAI-compatible
     `/v1/embeddings` endpoint; default OpenRouter), `EMBEDDINGS_BATCH_SIZE`
     (default `96`).
+  - Vectors are cached to `<CONTENT_ROOT>/.fsbrain/embeddings.json` so a restart
+    re-embeds only changed notes. The file is safe to delete (it rebuilds on
+    demand) and is tagged with the model, so switching `EMBEDDINGS_MODEL`
+    invalidates it automatically.
 
 Example:
 
