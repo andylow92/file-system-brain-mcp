@@ -35,6 +35,15 @@ function isEnabled(value: string | undefined): boolean {
 }
 
 /**
+ * Whether the operator asked for embeddings via `FSBRAIN_EMBEDDINGS`, regardless
+ * of whether a key is present. Lets callers distinguish "off" (stay quiet) from
+ * "on but misconfigured" (worth a startup warning).
+ */
+export function isEmbeddingsRequested(env: NodeJS.ProcessEnv = process.env): boolean {
+  return isEnabled(env.FSBRAIN_EMBEDDINGS);
+}
+
+/**
  * Read embedding config from the environment. Returns `null` — the signal to
  * stay on the offline TF-IDF engine — unless `FSBRAIN_EMBEDDINGS` is on and a key
  * (`EMBEDDINGS_API_KEY`, else `OPENROUTER_API_KEY`) is set. `EMBEDDINGS_MODEL`,

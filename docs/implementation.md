@@ -681,11 +681,10 @@ The planned roadmap is complete, and with schema packs (#19) shipped the entire
 gbrain-inspired "Brain ideas" sequence (#15–22) is done too. Both original
 enhancement items (real embeddings #13, Mermaid diagrams #14) have now shipped as
 well; the embedding index persists across restarts and is eval-guarded (offline
-
-- provider-gated), so #13 is complete end to end. The main remaining optional
-  item is implicit relevance feedback (#4 in
-  [`improvement-ideas.md`](improvement-ideas.md)). These are optional, not part of
-  the original plan:
+and provider-gated), so #13 is complete end to end. The main remaining optional
+item is implicit relevance feedback (#4 in
+[`improvement-ideas.md`](improvement-ideas.md)). These are optional, not part of
+the original plan:
 
 13. **Real embeddings** (the remaining half of RAG). ✅ **Done (opt-in).** A
     pluggable retrieval-engine seam (`apps/api/src/index/retrievalEngine.ts`)

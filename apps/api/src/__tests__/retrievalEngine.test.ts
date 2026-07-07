@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { EmbedFn } from '../embeddings/client.js';
-import { loadEmbeddingConfig } from '../embeddings/config.js';
+import { isEmbeddingsRequested, loadEmbeddingConfig } from '../embeddings/config.js';
 import type { VectorStore } from '../embeddings/vectorStore.js';
 import {
   createEmbeddingsEngine,
@@ -164,7 +164,7 @@ describe('createResilientEngine', () => {
     expect(onFallback).toHaveBeenCalledWith('build', expect.any(Error));
   });
 
-  it('returns no semantic hits (not a throw) when a per-query embed fails', async () => {
+  it('degrades a failing per-query embed to the fallback engine (lexical, not empty)', async () => {
     const onFallback = vi.fn();
     const queryFailEmbed: EmbedFn = async (texts) => {
       // Succeed for the multi-text chunk batch at build time; fail single-text
@@ -181,8 +181,26 @@ describe('createResilientEngine', () => {
     );
 
     const index = await engine.build(DOCS);
-    await expect(index.queryRanked('kitten', {})).resolves.toEqual([]);
+    // A lexical query still resolves via the TF-IDF fallback rather than [].
+    const ranked = await index.queryRanked('feline', {});
+    expect(ranked[0]?.path).toBe('cats.md');
     expect(onFallback).toHaveBeenCalledWith('query', expect.any(Error));
+  });
+
+  it('returns [] only when the fallback also cannot answer the query', async () => {
+    const queryFailEmbed: EmbedFn = async (texts) => {
+      if (texts.length === 1) {
+        throw new Error('transient');
+      }
+      return texts.map(() => [1, 0]);
+    };
+    const engine = createResilientEngine(
+      createEmbeddingsEngine(queryFailEmbed),
+      createTfidfEngine(),
+    );
+    const index = await engine.build(DOCS);
+    // No lexical overlap with any note → TF-IDF fallback also finds nothing.
+    await expect(index.queryRanked('zzzznomatch', {})).resolves.toEqual([]);
   });
 });
 
@@ -210,6 +228,12 @@ describe('loadEmbeddingConfig / resolveEmbedFn (the toggle)', () => {
 
   it('stays off when enabled but no key is present', () => {
     expect(loadEmbeddingConfig({ FSBRAIN_EMBEDDINGS: 'on' })).toBeNull();
+  });
+
+  it('isEmbeddingsRequested reflects the flag regardless of key (for the misconfig warning)', () => {
+    expect(isEmbeddingsRequested({})).toBe(false);
+    expect(isEmbeddingsRequested({ FSBRAIN_EMBEDDINGS: 'on' })).toBe(true);
+    expect(isEmbeddingsRequested({ FSBRAIN_EMBEDDINGS: 'off' })).toBe(false);
   });
 
   it('turns on with a flag + key, falling back to OPENROUTER_API_KEY', () => {

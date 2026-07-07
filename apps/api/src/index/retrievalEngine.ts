@@ -32,7 +32,7 @@ import {
 } from '@repo/shared';
 
 import type { EmbedFn } from '../embeddings/client.js';
-import { loadEmbeddingConfig } from '../embeddings/config.js';
+import { isEmbeddingsRequested, loadEmbeddingConfig } from '../embeddings/config.js';
 import { createEmbedFn } from '../embeddings/client.js';
 import { createFileVectorStore, type VectorStore } from '../embeddings/vectorStore.js';
 
@@ -200,10 +200,12 @@ export type FallbackReason = 'build' | 'query';
 /**
  * Wrap a `primary` engine so any failure degrades to `fallback` instead of
  * breaking search. A build failure (bad key, no network) rebuilds the whole
- * corpus on the fallback engine; a per-query failure (a transient embed error)
- * returns no semantic hits for that query — lexical and hybrid search, which
- * fuse the untouched full-text engine, keep working regardless. `onFallback` is
- * a hook for a log line.
+ * corpus on the fallback engine. A per-query failure (a transient embed error)
+ * degrades **that query** to the fallback engine's ranking too: the fallback
+ * index over the same corpus is built lazily on the first such failure and
+ * reused, so `/api/semantic-search` falls back to lexical ranking rather than
+ * going dark. (Hybrid search already keeps its untouched full-text half.)
+ * `onFallback` is a hook for a log line.
  */
 export function createResilientEngine(
   primary: RetrievalEngine,
@@ -220,13 +222,28 @@ export function createResilientEngine(
         onFallback?.('build', error);
         return fallback.build(documents);
       }
+
+      // Built lazily on the first per-query failure, then reused for the life of
+      // this index so we don't rebuild the fallback on every degraded query.
+      let fallbackIndex: Promise<BuiltRetrievalIndex> | null = null;
+      const ensureFallback = (): Promise<BuiltRetrievalIndex> => {
+        if (!fallbackIndex) {
+          fallbackIndex = fallback.build(documents);
+        }
+        return fallbackIndex;
+      };
+
       return {
         async querySemantic(query, options) {
           try {
             return await built.querySemantic(query, options);
           } catch (error) {
             onFallback?.('query', error);
-            return [];
+            try {
+              return await (await ensureFallback()).querySemantic(query, options);
+            } catch {
+              return [];
+            }
           }
         },
         async queryRanked(query, options) {
@@ -234,7 +251,11 @@ export function createResilientEngine(
             return await built.queryRanked(query, options);
           } catch (error) {
             onFallback?.('query', error);
-            return [];
+            try {
+              return await (await ensureFallback()).queryRanked(query, options);
+            } catch {
+              return [];
+            }
           }
         },
       };
@@ -289,8 +310,17 @@ export function resolveRetrievalEngine(
     onFallback?: (reason: FallbackReason, error: unknown) => void;
   } = {},
 ): RetrievalEngine {
-  const config = loadEmbeddingConfig(options.env ?? process.env);
+  const env = options.env ?? process.env;
+  const config = loadEmbeddingConfig(env);
   if (!config) {
+    // Distinguish "off" (stay quiet) from "asked for but unconfigured" — the
+    // latter silently runs TF-IDF, which is a confusing surprise without a hint.
+    if (isEmbeddingsRequested(env)) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        '[retrieval] FSBRAIN_EMBEDDINGS is on but no EMBEDDINGS_API_KEY/OPENROUTER_API_KEY is set; using the offline TF-IDF engine.',
+      );
+    }
     return createTfidfEngine();
   }
   return createRetrievalEngine({
