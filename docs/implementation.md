@@ -5,7 +5,28 @@
 > Keep it accurate: update the status tables when you finish a unit of work.
 > Routed from [`AGENTS.md`](../AGENTS.md).
 
-_Last updated: 2026-07-06 (embeddings + persisted index)_
+_Last updated: 2026-07-07 (embeddings: persisted index + eval)_
+
+> **Latest change.** **Embedding retrieval eval.** The embedding engine now has a
+> regression harness, closing the last open piece of #13. It runs in two layers.
+> **(1) Deterministic, offline (always runs in `npm test`).** A real embedding
+> model can't run in CI (network, key, cost, non-determinism), and a token-overlap
+> eval would prove nothing about _semantic_ retrieval — so a controlled
+> **concept-embedder** test double (`__tests__/fixtures/embeddingEval.ts` —
+> `conceptEmbed`, a curated synonym lexicon projected onto concept axes via the
+> shared `tokenize`) drives the **real** embedding engine over a fixture where
+> each query shares a _concept_ but **zero tokens** with its expected note. This
+> pins the engine's pipeline (chunk → embed → cosine → dedupe → recall/MRR) and
+> proves the semantic-over-lexical win deterministically: embeddings retrieve
+> every case (recall 1, MRR 1) while TF-IDF, a bag-of-words ranker, retrieves
+> **none** (recall 0) — which also guards that the engine really is
+> embedding-based rather than silently falling through to lexical. **(2)
+> Provider-gated live (opt-in).** When `FSBRAIN_EMBEDDINGS` is on with a key, the
+> golden `retrievalCorpus` fixture runs against a real `/api/semantic-search`
+> through a live server and asserts a recall floor; `describe.skip` in CI, where no
+> key is configured. Both reuse the pure `@repo/shared` metric helpers
+> (`scoreEvalCase` / `summarizeEval` / `formatEvalReport`) from #20. Tests:
+> `apps/api` `__tests__/embeddingEval.test.ts`.
 
 > **Latest change.** **Persisted embedding index.** The opt-in embedding engine
 > now **survives restarts** instead of re-embedding the whole vault on every
@@ -659,11 +680,12 @@ polish, mobile, and multi-device sync are **explicitly deprioritized** for now.
 The planned roadmap is complete, and with schema packs (#19) shipped the entire
 gbrain-inspired "Brain ideas" sequence (#15–22) is done too. Both original
 enhancement items (real embeddings #13, Mermaid diagrams #14) have now shipped as
-well, and the embedding index now persists across restarts too; what remains is
-evaluating that engine through the eval harness (#20) against a configured
-provider, plus implicit relevance feedback (#4 in
-[`improvement-ideas.md`](improvement-ideas.md)). These are optional, not part of
-the original plan:
+well; the embedding index persists across restarts and is eval-guarded (offline
+
+- provider-gated), so #13 is complete end to end. The main remaining optional
+  item is implicit relevance feedback (#4 in
+  [`improvement-ideas.md`](improvement-ideas.md)). These are optional, not part of
+  the original plan:
 
 13. **Real embeddings** (the remaining half of RAG). ✅ **Done (opt-in).** A
     pluggable retrieval-engine seam (`apps/api/src/index/retrievalEngine.ts`)
@@ -681,11 +703,13 @@ the original plan:
     search. Chunk-vector and query-vector caches bound the API cost, and the
     chunk cache is **persisted across restarts** (content-addressed, model-tagged,
     atomic, best-effort) to `<CONTENT_ROOT>/.fsbrain/embeddings.json` so a reboot
-    re-embeds only changed chunks (`embeddings/vectorStore.ts`). Still open:
-    evaluating the embedding engine through the retrieval-eval harness (#20)
-    against a configured provider. Tests: `apps/api`
-    `__tests__/embeddings.test.ts`, `__tests__/retrievalEngine.test.ts`,
-    `__tests__/vectorStore.test.ts`.
+    re-embeds only changed chunks (`embeddings/vectorStore.ts`). The engine is
+    **eval-guarded** too (extending #20): a deterministic offline concept-embedder
+    proves the semantic-over-lexical win in `npm test`, and a provider-gated live
+    eval measures a real provider on demand — so #13 is complete end to end.
+    Tests: `apps/api` `__tests__/embeddings.test.ts`,
+    `__tests__/retrievalEngine.test.ts`, `__tests__/vectorStore.test.ts`,
+    `__tests__/embeddingEval.test.ts`.
 14. **Mermaid diagrams.** ✅ **Done.** A fenced ` ```mermaid ` block renders as
     an SVG diagram in the preview. The preview's `pre` renderer routes a
     `language === 'mermaid'` fence to a new `MermaidDiagram` component
