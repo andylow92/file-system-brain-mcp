@@ -66,12 +66,19 @@ async function embedBatch(
  * Build an `EmbedFn` bound to a config: embeds arbitrarily many texts by chunking
  * them into `batchSize` requests (sequential to stay under provider rate limits)
  * and concatenating the vectors in input order.
+ *
+ * Empty or whitespace-only inputs are sent as a single space: many providers 400
+ * on an empty string, and one such input would otherwise fail the whole batch and
+ * force a corpus-wide fall back to TF-IDF. The substitute keeps the returned
+ * vectors parallel to `texts`; the vector for a blank chunk is meaningless, but
+ * the chunk carried no content to rank on anyway.
  */
 export function createEmbedFn(config: EmbeddingConfig): EmbedFn {
   return async (texts, signal) => {
+    const safeTexts = texts.map((text) => (text.trim().length > 0 ? text : ' '));
     const vectors: number[][] = [];
-    for (let i = 0; i < texts.length; i += config.batchSize) {
-      const batch = texts.slice(i, i + config.batchSize);
+    for (let i = 0; i < safeTexts.length; i += config.batchSize) {
+      const batch = safeTexts.slice(i, i + config.batchSize);
       vectors.push(...(await embedBatch(config, batch, signal)));
     }
     return vectors;

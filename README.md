@@ -74,7 +74,9 @@ in your notes goes through a **review queue you approve**.
 
 - **🔎 Smart search.** Find notes by **meaning**, not just exact words —
   `semantic` search ranks by relevance and `hybrid` search fuses keyword +
-  semantic results. Great for _"I know I wrote this somewhere…"_.
+  semantic results. Great for _"I know I wrote this somewhere…"_. Runs offline
+  on a built-in TF-IDF ranker by default; flip on **real embeddings** (below)
+  when you want stronger synonym/paraphrase matching.
 - **💬 Ask your notes (`think`).** Ask a question and get a **cited answer**
   assembled from your own notes — plus an honest list of **gaps** when the vault
   can't fully answer, so you know what's missing.
@@ -94,6 +96,15 @@ in your notes goes through a **review queue you approve**.
   meeting, project, idea…) and the graph **colours it by what it is**, agents
   learn the canonical types to author well-formed notes, and the maintenance scan
   flags notes that break the vocabulary — all from plain frontmatter, no database.
+- **🧠 NEW — Real embeddings (opt-in).** Semantic search is TF-IDF by default —
+  fully offline, no key. Set `FSBRAIN_EMBEDDINGS=on` with an API key and the same
+  search routes rank by **dense vector similarity** instead, so paraphrases and
+  synonyms that share no keywords still match. It's a **drop-in swap**: nothing
+  downstream (`semantic`/`hybrid` search, `think`, RAG context) changes, only the
+  scoring improves. Vectors are **cached to `.fsbrain/embeddings.json`** so a
+  restart re-embeds only changed notes, and the engine **falls back to TF-IDF**
+  on any provider outage — "off" is always a working search. See the
+  `FSBRAIN_EMBEDDINGS` env vars below.
 - **🪄 NEW — Learns from your edits (feedback loop).** When an agent drafts
   outreach — an **X post, LinkedIn message, or email** — and you rewrite it
   before sending, that edit is valuable signal. A scan compares the **draft vs.

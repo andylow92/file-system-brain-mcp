@@ -98,7 +98,9 @@ export function createFileVectorStore(rootPath: string): VectorStore {
         vectors: Object.fromEntries(vectors),
       };
       await fs.mkdir(dir, { recursive: true });
-      const tmp = `${file}.tmp`;
+      // Process-scoped temp name so two servers sharing one CONTENT_ROOT can't
+      // write the same temp file and tear each other's rename.
+      const tmp = `${file}.${process.pid}.tmp`;
       await fs.writeFile(tmp, JSON.stringify(payload), 'utf8');
       await fs.rename(tmp, file);
     },

@@ -50,7 +50,7 @@ the in-process API. Pick the tool that matches your intent:
 | Overwrite a note (pass `etag`)                         | `update_note`       | `PUT /api/file`              |
 | Surgical edit (append/replace section/block, `dryRun`) | `patch_note`        | `PATCH /api/file`            |
 | Full-text / `#tag` search                              | `search_notes`      | `GET /api/search`            |
-| Semantic (TF-IDF) search                               | `semantic_search`   | `GET /api/semantic-search`   |
+| Semantic search (TF-IDF, or embeddings if enabled)     | `semantic_search`   | `GET /api/semantic-search`   |
 | Hybrid (RRF) search                                    | `hybrid_search`     | `GET /api/hybrid-search`     |
 | RAG context bundle (matches + focus-note neighbors)    | `get_context`       | `GET /api/context`           |
 | Cited answer kit + offline gap analysis                | `think`             | `GET /api/think`             |
@@ -104,8 +104,11 @@ Done and on `main`-track (details + status tables in `docs/implementation.md`):
   that fuses the two by Reciprocal Rank Fusion (`hybrid.ts`,
   `reciprocalRankFusion`) so neither exact keyword nor conceptual matches are
   missed. The Ctrl/Cmd-K quick-switcher has a Text|Semantic|Hybrid toggle
-  (prefix `#` for tags in Text mode). All three run offline, no API key; the
-  ranking engine is swappable for real embeddings later.
+  (prefix `#` for tags in Text mode). All three run offline, no API key, on the
+  TF-IDF ranker by default; the ranking engine is swappable for **real
+  embeddings** (opt-in `FSBRAIN_EMBEDDINGS`, see the _Real embeddings_ entry
+  below) behind the same `documents → ranked` contract, so nothing downstream
+  changes.
 - **Provenance** — mutations read an `X-Actor` header (default `human`) and are
   appended to an audit log (`CONTENT_ROOT/.fsbrain/audit.jsonl`), exposed via
   `GET /api/audit` and a web **Activity** tab with human-vs-agent badges.
@@ -204,8 +207,8 @@ tools=… · actor=…`) so a host log immediately shows whether the spawn
   and its backlinks as neighbor context, de-duped and packed to a token budget
   (`ceil(chars/4)`, no tokenizer). Stays fully local/offline; the bundle-shaping
   helpers are pure (`@repo/shared` `context.ts`) and the ranking engine is
-  swappable for real embeddings later behind the same `documents → ranked`
-  contract.
+  pluggable — TF-IDF by default, **real embeddings** when opted in (see below) —
+  behind the same `documents → ranked` contract.
 - **Brain layer — `think` (cited answers + offline gap analysis)** — turns a
   question into a **grounded answer kit** instead of raw pages. `GET /api/think`
   (and the `think` MCP tool) runs hybrid retrieval, assembles a context bundle,
@@ -289,10 +292,34 @@ person`). `GET /api/schema` (and the `schema_pack` MCP tool) returns
   proposals, and a per-pair marker keeps an approved lesson from re-filing. No
   draft is ever posted or sent; the lesson is a mechanical summary, not an
   LLM-written rule (on-demand by default, optional `FEEDBACK_INTERVAL_MS` timer).
+- **Real embeddings — opt-in vector retrieval** — the retrieval engine behind
+  `VaultIndex` is a pluggable seam (`apps/api/src/index/retrievalEngine.ts`) with
+  two interchangeable implementations: **TF-IDF** (default, offline, no key) and
+  **embeddings** (opt-in), which chunks the corpus with the _same_ chunker, embeds
+  each chunk via an OpenAI-compatible `/v1/embeddings` provider, and ranks by
+  dense cosine. Both return identical `SemanticHit`/`RankedChunk` shapes, so
+  `semantic_search`, `hybrid_search`, `think`, and `get_context` are unchanged —
+  only the scoring improves on synonyms/paraphrase. The toggle is a single env
+  var, **`FSBRAIN_EMBEDDINGS`** (off by default), plus `EMBEDDINGS_API_KEY` (falls
+  back to `OPENROUTER_API_KEY`) and optional `EMBEDDINGS_MODEL` / `EMBEDDINGS_URL`
+  / `EMBEDDINGS_BATCH_SIZE`. It is **resilient**: a build failure (bad key, no
+  network) or a transient per-query embed error degrades to the TF-IDF ranker
+  over the same corpus rather than breaking search, so "off" is always a working
+  search. Chunk vectors are **content-addressed** (sha-256 of the embeddable text
+  → vector) and **persisted** to `CONTENT_ROOT/.fsbrain/embeddings.json` (atomic
+  temp+rename, pruned to the live corpus, tagged with the model so a model switch
+  invalidates cleanly), so a restart re-embeds only changed chunks. Persistence
+  is best-effort — a missing/corrupt/wrong-model file loads as empty and a save
+  failure just means a colder cache, never a failed build. The pure dense-ranking
+  math lives in `@repo/shared` (`embeddings.ts`); the only I/O is a tiny `fetch`
+  client (`apps/api/src/embeddings/`), mirroring `think`'s OpenRouter wiring. An
+  eval harness (`embeddingEval.test.ts`) proves the semantic-over-lexical win
+  offline (a controlled concept-embedder retrieves cases that share a concept but
+  **zero tokens** with the query; TF-IDF retrieves none).
 
-**Not yet built (next):** real vector embeddings to back semantic search (the
-cached index + context bundle endpoint above are the seam for it). See the
-roadmap in `docs/implementation.md`.
+**Not yet built (next):** see the roadmap in `docs/implementation.md` — the
+core retrieval and self-improvement surface (search, embeddings, RAG, `think`,
+maintenance, feedback) is now in place.
 
 ---
 
