@@ -252,9 +252,7 @@ describe('App', () => {
     fireEvent.keyDown(window, { key: 's', ctrlKey: true });
 
     expect(filesApi.updateFile).toHaveBeenCalled();
-    expect(
-      await screen.findByRole('dialog', { name: 'Could not save file' }),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: 'Could not save file' })).toBeInTheDocument();
     expect(screen.getByText('Network error')).toBeInTheDocument();
   });
 });
