@@ -38,6 +38,7 @@ feed and the audit log at `<CONTENT_ROOT>/.fsbrain/audit.jsonl`.
 | `list_proposals`    | List proposals + review status (resolve is human).                                       |
 | `proposal_stats`    | Per-category approve/reject rates + threshold nudges (review-queue learning).            |
 | `list_skills`       | List skill notes (`type: skill`) — reusable procedural playbooks.                        |
+| `curate_skills`     | Report-only skill-library curator: incomplete / near-duplicate / stale skills.           |
 | `run_maintenance`   | Dream-cycle scan: broken-link/orphan/duplicate fixes + stale-note & schema flags.        |
 | `run_feedback`      | Learn from reviewed draft→final outreach pairs; file lessons as proposals.               |
 
@@ -50,7 +51,12 @@ human-only by design.
 goal, steps, gotchas. `list_skills` finds them; read one with `read_note`.
 After completing a task that taught you a reusable procedure, contribute it
 back with `propose_edit` (a `type: skill` note) so the human approves it — the
-skill library grows from real work, with review.
+skill library grows from real work, with review. `curate_skills` is a
+report-only pass over that library: it flags skills that are structurally
+**incomplete** (missing canonical sections), near-**duplicate**, or **stale**
+(long unchanged), so you can `propose_edit` a fleshed-out or consolidated skill.
+A skill with frontmatter `pinned: true` is exempt from the duplicate/stale
+flags. It files nothing — resolution stays human-only.
 
 **Schema packs (typed page types).** `schema_pack` returns the canonical note
 `type:` values (person, meeting, project, idea…), each with a colour and the
@@ -72,7 +78,7 @@ npm run start:agent        # from the repo root — runs `fsbrain-mcp` on stdio
 The server prints a one-line readiness banner on stderr:
 
 ```
-fsbrain-mcp ready · mode=embedded · vault=/home/me/.fsbrain/vault · tools=26 · actor=agent:mcp
+fsbrain-mcp ready · mode=embedded · vault=/home/me/.fsbrain/vault · tools=27 · actor=agent:mcp
 ```
 
 For active development with auto-reload:

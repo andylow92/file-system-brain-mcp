@@ -31,18 +31,18 @@
  * the browser and is unit-tested in isolation (its tests live in `apps/api`). It
  * reuses the same `extractWikilinks` + `resolveWikilink` as `/api/backlinks` and
  * the graph, so its notion of "links" can never drift from the rest of the
- * vault. Similarity reuses the semantic engine's `tokenize`; the note-level
- * TF-IDF weighting below mirrors `semantic.ts`'s chunk-level scoring, applied per
- * whole note (it is re-derived here, so keep the two in step if you tune either).
+ * vault. Near-duplicate detection is delegated to the shared `similarity.ts`
+ * (`findDuplicatePairs`), so the maintenance scan and the skill curator score
+ * note similarity with one implementation.
  *
  * Out of scope for v1: contradiction detection. True contradiction finding needs
  * an LLM, which would break the offline guarantee — it is a documented follow-up
  * behind the same server-side `OPENROUTER_API_KEY` gate that `think`'s synthesis
  * uses, not built here.
  */
-import { extractWikilinks, parseFrontmatter, resolveWikilink } from './markdown.js';
+import { extractWikilinks, resolveWikilink } from './markdown.js';
 import { validateVault, type SchemaPack } from './schema.js';
-import { tokenize } from './semantic.js';
+import { findDuplicatePairs } from './similarity.js';
 
 /** The kinds of vault-hygiene problem a scan can report. */
 export type MaintenanceKind = 'broken_link' | 'orphan' | 'duplicate' | 'stale' | 'schema';
@@ -144,46 +144,6 @@ function appendCrossLink(content: string, targetLabel: string): string {
   return `${content.replace(/\s+$/, '')}\n\n> See also [[${targetLabel}]]\n`;
 }
 
-/**
- * Build a normalized TF-IDF vector for a note's tokens — the same weighting the
- * semantic engine (`semantic.ts`) uses per chunk, applied here at note level so
- * a pairwise cosine measures whole-note similarity. A normalized vector means
- * the dot product *is* the cosine.
- */
-function buildNoteVector(tokens: string[], idf: (term: string) => number): Map<string, number> {
-  const termFrequency = new Map<string, number>();
-  for (const token of tokens) {
-    termFrequency.set(token, (termFrequency.get(token) ?? 0) + 1);
-  }
-
-  const vector = new Map<string, number>();
-  let norm = 0;
-  for (const [term, count] of termFrequency) {
-    const weight = (1 + Math.log(count)) * idf(term);
-    vector.set(term, weight);
-    norm += weight * weight;
-  }
-
-  const magnitude = Math.sqrt(norm) || 1;
-  for (const [term, weight] of vector) {
-    vector.set(term, weight / magnitude);
-  }
-  return vector;
-}
-
-/** Cosine of two normalized vectors = their dot product (iterate the smaller). */
-function cosine(a: Map<string, number>, b: Map<string, number>): number {
-  const [small, large] = a.size <= b.size ? [a, b] : [b, a];
-  let dot = 0;
-  for (const [term, weight] of small) {
-    const other = large.get(term);
-    if (other) {
-      dot += weight * other;
-    }
-  }
-  return dot;
-}
-
 /** Total order over findings so the same corpus always yields the same list. */
 function sortFindings(findings: MaintenanceFinding[]): MaintenanceFinding[] {
   return [...findings].sort((a, b) => {
@@ -276,51 +236,28 @@ export function scanVault(
     }
   }
 
-  // --- duplicate: note-level TF-IDF cosine ≥ threshold. One vector per note,
-  // O(n²) pairwise compare (fine for a local vault), each pair reported once.
-  const noteTokens = documents.map((doc) => tokenize(parseFrontmatter(doc.content).body));
-  const documentFrequency = new Map<string, number>();
-  for (const tokens of noteTokens) {
-    for (const term of new Set(tokens)) {
-      documentFrequency.set(term, (documentFrequency.get(term) ?? 0) + 1);
-    }
-  }
-  const total = documents.length;
-  const idf = (term: string) => Math.log(1 + total / ((documentFrequency.get(term) ?? 0) + 1));
-  const vectors = noteTokens.map((tokens) => buildNoteVector(tokens, idf));
-
-  for (let i = 0; i < documents.length; i += 1) {
-    for (let j = i + 1; j < documents.length; j += 1) {
-      // Two notes with no rankable tokens are not "duplicates" of each other.
-      if (vectors[i].size === 0 || vectors[j].size === 0) {
-        continue;
-      }
-      const score = cosine(vectors[i], vectors[j]);
-      if (score < duplicateThreshold) {
-        continue;
-      }
-
-      const [a, b] = [documents[i].path, documents[j].path].sort((x, y) => x.localeCompare(y));
-      // If the two notes already cross-link (either direction), adding another
-      // link is noise — report the duplicate, but suggest no edit.
-      const alreadyLinked = resolvedOut.get(a)!.has(b) || resolvedOut.get(b)!.has(a);
-      findings.push({
-        kind: 'duplicate',
-        paths: [a, b],
-        detail: `"${labelOf(a)}" and "${labelOf(b)}" are highly similar (cosine ${score.toFixed(2)}); possible duplicates.`,
-        score: Number(score.toFixed(4)),
-        ...(alreadyLinked
-          ? {}
-          : {
-              suggestion: {
-                action: 'update',
-                path: a,
-                content: appendCrossLink(contentByPath.get(a) ?? '', labelOf(b)),
-                note: `"${labelOf(a)}" and "${labelOf(b)}" look like near-duplicates (cosine ${score.toFixed(2)}); adding a cross-link rather than merging.`,
-              },
-            }),
-      });
-    }
+  // --- duplicate: note-level TF-IDF cosine ≥ threshold (shared `similarity.ts`
+  // helper), O(n²) pairwise compare (fine for a local vault), each pair once.
+  for (const { a, b, score } of findDuplicatePairs(documents, duplicateThreshold)) {
+    // If the two notes already cross-link (either direction), adding another
+    // link is noise — report the duplicate, but suggest no edit.
+    const alreadyLinked = resolvedOut.get(a)!.has(b) || resolvedOut.get(b)!.has(a);
+    findings.push({
+      kind: 'duplicate',
+      paths: [a, b],
+      detail: `"${labelOf(a)}" and "${labelOf(b)}" are highly similar (cosine ${score.toFixed(2)}); possible duplicates.`,
+      score: Number(score.toFixed(4)),
+      ...(alreadyLinked
+        ? {}
+        : {
+            suggestion: {
+              action: 'update',
+              path: a,
+              content: appendCrossLink(contentByPath.get(a) ?? '', labelOf(b)),
+              note: `"${labelOf(a)}" and "${labelOf(b)}" look like near-duplicates (cosine ${score.toFixed(2)}); adding a cross-link rather than merging.`,
+            },
+          }),
+    });
   }
 
   // --- stale: a load-bearing note (many inbound links) that hasn't changed in a

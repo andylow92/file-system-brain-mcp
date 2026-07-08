@@ -43,6 +43,7 @@ import type {
   QuestionEntry,
   SearchMatch,
   SemanticHit,
+  SkillCuratorFinding,
   SkillSummary,
   ThresholdRecommendation,
 } from '@repo/shared';
@@ -716,6 +717,20 @@ function registerTools(server: McpServer, apiRequest: ReturnType<typeof createAp
       const search = params.toString();
       return apiRequest<SkillSummary[]>(`/api/skills${search ? `?${search}` : ''}`);
     }),
+  );
+
+  register(
+    'curate_skills',
+    "Curate the vault's skill library (report-only). Flags skill notes that are " +
+      'structurally **incomplete** (missing canonical sections — When to Use / ' +
+      'Procedure / Pitfalls / Verification), near-**duplicate** skills worth ' +
+      'consolidating, and **stale** skills unchanged for a long time. Files ' +
+      'nothing — to act on a finding, `propose_edit` the fleshed-out or merged ' +
+      'skill for human review (that is how the skill library improves). A skill ' +
+      'with frontmatter `pinned: true` is exempt from the duplicate/stale flags. ' +
+      'Resolution stays human-only. Returns { findings }.',
+    {},
+    tool(async () => apiRequest<{ findings: SkillCuratorFinding[] }>('/api/skills/curator')),
   );
 
   register(

@@ -64,6 +64,7 @@ describe('mcp server (self-contained)', () => {
         [
           'create_folder',
           'create_note',
+          'curate_skills',
           'delete_path',
           'get_backlinks',
           'get_block_anchors',
