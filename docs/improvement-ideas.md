@@ -113,6 +113,34 @@ the highest-risk content, so the dream-cycle scan now surfaces them as a
 
 Cheap, deterministic, and makes the dream cycle feel genuinely alive.
 
+## 6. Skill curator — usage-aware skill lifecycle
+
+📄 **Proposed** (design doc:
+[`skill-curator-proposal.md`](skill-curator-proposal.md)). Inspired by the
+**Curator** in [Nous Research's Hermes Agent](https://github.com/nousresearch/hermes-agent):
+the vault already _grows_ skills (#1) but never _prunes_ them, so stale and
+near-duplicate skill notes accumulate and dilute `list_skills`.
+
+- **Phase 1 (report-only, no new telemetry):** a pure `@repo/shared`
+  `curateSkills` helper + `GET /api/skills/curator` + a `curate_skills` MCP
+  tool that flags **incomplete** skills (missing canonical sections),
+  **near-duplicate** skills (reusing `maintenance.ts`'s note-level cosine), and
+  **stale** skills (mtime-based, opt-in like #5). A `pinned: true` frontmatter
+  flag exempts a skill — the fsbrain analog of `hermes curator pin`.
+- **Phase 2:** a best-effort `.fsbrain/skill-usage.jsonl` use log (mirroring the
+  audit/question logs) turns "stale" from _unchanged_ into _unused_ — the
+  usage signal the Hermes Curator is built on, which the vault lacks today
+  (reads aren't logged; see #5).
+- **Phase 3:** `POST /api/skills/curator/scan` files safe fixes as
+  `agent:curator` proposals (append section stubs / cross-links, never a merge
+  or delete), idempotent like the dream cycle, and auto-tunes its threshold via
+  the review-queue stats from #2.
+
+Stays offline, deterministic, and human-gated throughout; LLM-driven
+consolidation is a documented non-goal (it would break the offline guarantee,
+same line the repo draws for contradiction detection). See the proposal for
+schemas, endpoints, tests, and open questions.
+
 ---
 
 ## Quick wins that unlock the above
