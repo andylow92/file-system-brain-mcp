@@ -12,6 +12,7 @@ vi.mock('../api/files', async () => {
     fetchTree: vi.fn(),
     fetchFile: vi.fn(),
     renamePath: vi.fn(),
+    updateFile: vi.fn(),
   };
 });
 
@@ -217,5 +218,41 @@ describe('App', () => {
     expect(
       screen.getByText(/Moved successfully, but could not refresh "renamed\/note.md"/),
     ).toBeInTheDocument();
+  });
+
+  it('surfaces an error dialog when the Cmd/Ctrl+S shortcut fails to save', async () => {
+    vi.mocked(filesApi.fetchTree).mockResolvedValue([
+      { name: 'README.md', path: 'README.md', isDirectory: false },
+    ]);
+
+    vi.mocked(filesApi.fetchFile).mockResolvedValue({
+      path: 'README.md',
+      content: '# Original',
+      encoding: 'utf-8',
+      lastModified: '2026-04-21T00:00:00.000Z',
+      etag: 'readme-v1',
+    });
+
+    vi.mocked(filesApi.updateFile).mockRejectedValue(new Error('Network error'));
+
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole('treeitem', { name: /README.md/ }));
+    await waitFor(() => expect(filesApi.fetchFile).toHaveBeenCalledWith('README.md'));
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Edit' }));
+    fireEvent.change(await screen.findByRole('textbox', { name: 'Markdown source' }), {
+      target: { value: '# Original\nedited' },
+    });
+
+    fireEvent.keyDown(window, { key: 's', ctrlKey: true });
+
+    expect(filesApi.updateFile).toHaveBeenCalled();
+    expect(await screen.findByRole('dialog', { name: 'Could not save file' })).toBeInTheDocument();
+    expect(screen.getByText('Network error')).toBeInTheDocument();
   });
 });

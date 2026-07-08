@@ -204,7 +204,7 @@ export function App() {
 
       if (modifier && event.key.toLowerCase() === 's') {
         event.preventDefault();
-        void saveCurrentFile();
+        triggerSave();
       }
     };
 
@@ -274,6 +274,15 @@ export function App() {
 
     await refreshTreeAndCurrentFile(selectedFilePath);
     bumpActivity();
+  }
+
+  // Entry points that trigger a save without awaiting its result (keyboard
+  // shortcut, editor pane) still need to surface a failure — otherwise the
+  // user gets no feedback and may believe the save succeeded.
+  function triggerSave() {
+    void saveCurrentFile().catch((error: unknown) => {
+      showInfoModal('Could not save file', getErrorMessage(error), 'error');
+    });
   }
 
   // React to an out-of-band change to the *currently open* file. Never clobber
@@ -470,9 +479,7 @@ export function App() {
               markdown={currentDraftMarkdown}
               savedMarkdown={currentSavedMarkdown}
               isDirty={isCurrentFileDirty}
-              onSave={() => {
-                void saveCurrentFile();
-              }}
+              onSave={triggerSave}
               onChangeMarkdown={(nextValue: string) => {
                 if (!selectedFilePath) {
                   return;
