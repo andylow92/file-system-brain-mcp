@@ -11,7 +11,7 @@
 
 > **A local-first markdown vault you can hand to an AI agent — and it gets better
 > the more you use it.** Browse it like a **GitHub file tree**, edit it like
-> **Notion**, and plug it into Claude, Cursor, or any **MCP** host as **25 agent
+> **Notion**, and plug it into Claude, Cursor, or any **MCP** host as **26 agent
 > tools** — semantic & hybrid search, RAG context, and cited answers. The vault
 > **self-improves**: it learns your writing voice from your draft→final edits and
 > self-tidies broken links, orphans, and duplicates — every change lands in a
@@ -215,7 +215,7 @@ npm run start:agent      # launches the self-contained fsbrain-mcp on stdio
 ```
 
 `fsbrain-mcp` embeds the storage API in-process and auto-creates the vault
-at `~/.fsbrain/vault` (override with `CONTENT_ROOT=...`). It exposes 25
+at `~/.fsbrain/vault` (override with `CONTENT_ROOT=...`). It exposes 26
 vault tools (`list_notes`, `read_note`, `create_note`, `patch_note`,
 `semantic_search`, `hybrid_search`, `think`, `get_graph`, `propose_edit`,
 `run_maintenance`, `list_skills`, `run_feedback`, `proposal_stats`, …) and records every agent write to
