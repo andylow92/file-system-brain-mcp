@@ -133,8 +133,9 @@ near-duplicate skill notes accumulate and dilute `list_skills`.
   (reads aren't logged; see #5).
 - **Phase 3:** `POST /api/skills/curator/scan` files safe fixes as
   `agent:curator` proposals (append section stubs / cross-links, never a merge
-  or delete), idempotent like the dream cycle, and auto-tunes its threshold via
-  the review-queue stats from #2.
+  or delete), idempotent like the dream cycle; it can reuse #2's tuning **core**
+  to adjust its threshold, with a little category-specific wiring (the current
+  tuner hardcodes `maintenance:duplicate`).
 
 Stays offline, deterministic, and human-gated throughout; LLM-driven
 consolidation is a documented non-goal (it would break the offline guarantee,

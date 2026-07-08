@@ -24,19 +24,19 @@ offline, human-gated "skill curator" to close that gap.
 
 ## 2. What fsbrain already has (Hermes → fsbrain map)
 
-| Hermes concept                                     | fsbrain today                                                                  | Status                                                              |
-| -------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------- |
-| Skills = `SKILL.md` knowledge docs                 | Skill notes (`type: skill`), `@repo/shared` `skills.ts`                        | ✅                                                                  |
-| Progressive disclosure (list → view → ref)         | `list_skills` (L0) + `read_note` (L1)                                          | ✅                                                                  |
-| Autonomous skill creation, **write-approval gate** | Agent `propose_edit` → human approves in Review tab                            | ✅                                                                  |
-| Skill self-improvement during use                  | Outreach feedback loop → channel playbook (a `type: skill` note); `patch_note` | ✅ (partial)                                                        |
-| Curator: **consolidate near-duplicates**           | Maintenance `duplicate` finding (generic, note-level cosine)                   | ⚠️ not skill-aware                                                  |
-| Curator: **stale → archive by non-use**            | Maintenance `stale` finding = load-bearing (inbound links) + mtime             | ❌ not usage-driven; skills rarely wikilinked, so they slip through |
-| Curator: **usage telemetry** (`.usage.json`)       | Audit log records **writes only**, never reads/uses                            | ❌ missing                                                          |
-| Curator: **pinning** (protect a skill)             | —                                                                              | ❌ missing                                                          |
-| Curator: never auto-delete, archive + rollback     | Proposals never auto-apply; deletion stays human                               | ✅ (philosophy matches)                                             |
-| Curator: per-run reports                           | `GET /api/maintenance` findings + audit log                                    | ✅                                                                  |
-| "Learns your taste"                                | `proposalStats.ts` threshold tuning (item #2)                                  | ✅ (bonus; Hermes has no equivalent)                                |
+| Hermes concept                                     | fsbrain today                                                                                                | Status                                                              |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------- |
+| Skills = `SKILL.md` knowledge docs                 | Skill notes (`type: skill`), `@repo/shared` `skills.ts`                                                      | ✅                                                                  |
+| Progressive disclosure (list → view → ref)         | `list_skills` (L0) + `read_note` (L1)                                                                        | ✅                                                                  |
+| Autonomous skill creation, **write-approval gate** | Agent `propose_edit` → human approves in Review tab                                                          | ✅                                                                  |
+| Skill self-improvement during use                  | Outreach feedback loop → channel playbook skill, filed as a human-reviewed `propose_edit` (not `patch_note`) | ✅ (partial)                                                        |
+| Curator: **consolidate near-duplicates**           | Maintenance `duplicate` finding (generic, note-level cosine)                                                 | ⚠️ not skill-aware                                                  |
+| Curator: **stale → archive by non-use**            | Maintenance `stale` finding = load-bearing (inbound links) + mtime                                           | ❌ not usage-driven; skills rarely wikilinked, so they slip through |
+| Curator: **usage telemetry** (`.usage.json`)       | Audit log records **writes only**, never reads/uses                                                          | ❌ missing                                                          |
+| Curator: **pinning** (protect a skill)             | —                                                                                                            | ❌ missing                                                          |
+| Curator: never auto-delete, archive + rollback     | Proposals never auto-apply; deletion stays human                                                             | ✅ (philosophy matches)                                             |
+| Curator: per-run reports                           | `GET /api/maintenance` findings + audit log                                                                  | ✅                                                                  |
+| "Learns your taste"                                | `proposalStats.ts` threshold tuning (item #2)                                                                | ✅ (bonus; Hermes has no equivalent)                                |
 
 **Takeaway:** fsbrain is ~80% of the way there. The missing 20% is a
 skill-scoped lifecycle and the usage signal that drives it.
@@ -130,8 +130,10 @@ Findings computed (all deterministic, report-only unless noted):
 - **`stale_skill`** — a skill unchanged for > `staleAfterDays`. Opt-in (only when
   `now` + `modifiedAt` are passed, exactly like `scanVault`'s freshness). Unlike
   the generic `stale` finding, it does **not** require inbound wikilinks —
-  procedural skills are rarely linked, so mtime alone is the honest signal.
-  Report-only. (Phase 2 upgrades this from "unchanged" to "unused".)
+  procedural skills are rarely linked (the generic `stale` also gates on
+  `minInbound`, default **3**, so a skill with < 3 inbound links never flags
+  regardless of age), so mtime alone is the honest signal. Report-only. (Phase 2
+  upgrades this from "unchanged" to "unused".)
 
 **Pinning:** a skill with frontmatter **`pinned: true`** is exempt from
 `duplicate_skill` and `stale_skill` (never surfaced for archival/merge). This is
@@ -161,12 +163,17 @@ into "unused".
 ```
 
 - `event: "use"` — appended (best-effort) when a **skill note** is read via
-  `GET /api/file` / `read_note`. Detecting "is this a skill" is a
-  `parseFrontmatter` the read already does for the etag.
+  `GET /api/file` / `read_note`. Detecting "is this a skill" is nearly free: the
+  read already parses frontmatter (via `findNoteId`, to resolve a note's `id:`),
+  so a `type: skill` check adds no new parse. (The etag itself is a raw sha1 of
+  bytes + mtime — it does **not** parse frontmatter; the read parses for `id:`,
+  not for the etag.)
 - `event: "list"` — appended when a skill is returned by `GET /api/skills`
   (discovery intent; the Hermes `view_count` analog).
-- **Best-effort, never fails the call** — identical guarantee to the question
-  log's "logging never fails the `think` call".
+- **Best-effort, never fails the call** — same guarantee as the question log, but
+  note _where_ it lives: in the **caller's** `try/catch` around the log call (as
+  at the `think` question-log call site), not inside the store, whose `record()`
+  can reject. A new use-log call site must repeat that `try/catch`.
 
 **Pure aggregator** (`@repo/shared`):
 
@@ -202,9 +209,13 @@ a skill path).
   `runMaintenanceScan` / `scanFeedback`. Only safe edits are ever filed:
   `incomplete` → append section stubs; `duplicate_skill` → append a
   `> See also [[other]]` cross-link (never a merge/delete).
-- **Auto-tuning for free:** because findings carry `category: curator:duplicate_skill`,
-  the existing `proposalStats` loop (item #2) tunes the duplicate threshold from
-  the human's approve/reject history — no new learning code.
+- **Auto-tuning reuses the core, plus a little wiring:** findings carry
+  `category: curator:duplicate_skill`, so `summarizeOutcomes` tallies its
+  approve/reject rate for free. The _tuning_ is not category-generic, though —
+  both existing callers hardcode `maintenance:duplicate` (files.ts ~1296, ~1548)
+  and `recommendThreshold` runs only for that one category — so the curator needs
+  its own small glue: a `find` for its category, a default threshold, and
+  applying the recommendation. No new _learning_ algorithm, just new plumbing.
 - **Lifecycle surface:** `curateSkills` can expose a per-skill
   `state: 'active' | 'stale' | 'dormant'` derived from usage + age, for a future
   web **Curator** panel (sibling to Maintenance/Review). "Archival" maps to a
@@ -215,19 +226,19 @@ a skill path).
 
 ## 5. Files touched (estimate)
 
-| Area                                        | Change                                                                           |
-| ------------------------------------------- | -------------------------------------------------------------------------------- |
-| `packages/shared/src/skillCurator.ts`       | **new** pure helper (`curateSkills`)                                             |
-| `packages/shared/src/skillUsage.ts`         | **new** pure aggregator (Phase 2)                                                |
-| `packages/shared/src/index.ts`              | export the new types/helpers                                                     |
-| `apps/api/src/storage/skillUsageLog.ts`     | **new** `SkillUsageLog` (Phase 2), mirrors `questionLog.ts`                      |
-| `apps/api/src/routes/files.ts`              | `GET /api/skills/curator`, `POST .../scan`, use-log hooks                        |
-| `apps/api/src/server.ts`                    | optional `SKILL_CURATOR_INTERVAL_MS` timer (Phase 3)                             |
-| `apps/mcp/src/server.ts`                    | register `curate_skills` tool (27th)                                             |
-| `apps/api/src/__tests__/`                   | `skillCurator.test.ts`, `skillUsage.test.ts` (pure)                              |
-| `apps/api/src/routes/`                      | `skillCurator.test.ts` (endpoint + provenance + idempotence)                     |
-| `apps/mcp/src/__tests__/freshClone.test.ts` | bump tool-count assertion 26 → 27                                                |
-| docs                                        | `implementation.md` status tables, `AGENTS.md` tool table, README/CONNECT counts |
+| Area                                        | Change                                                                                              |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `packages/shared/src/skillCurator.ts`       | **new** pure helper (`curateSkills`)                                                                |
+| `packages/shared/src/skillUsage.ts`         | **new** pure aggregator (Phase 2)                                                                   |
+| `packages/shared/src/index.ts`              | export the new types/helpers                                                                        |
+| `apps/api/src/storage/skillUsageLog.ts`     | **new** `SkillUsageLog` (Phase 2), mirrors `questionLog.ts`                                         |
+| `apps/api/src/routes/files.ts`              | `GET /api/skills/curator`, `POST .../scan`, use-log hooks                                           |
+| `apps/api/src/server.ts`                    | optional `SKILL_CURATOR_INTERVAL_MS` timer (Phase 3)                                                |
+| `apps/mcp/src/server.ts`                    | register `curate_skills` tool (27th)                                                                |
+| `apps/api/src/__tests__/`                   | `skillCurator.test.ts`, `skillUsage.test.ts` (pure)                                                 |
+| `apps/api/src/routes/`                      | `skillCurator.test.ts` (endpoint + provenance + idempotence)                                        |
+| `apps/mcp/src/__tests__/freshClone.test.ts` | bump **both** tool-surface assertions — the sorted `toolNames` array _and_ `tools.length` (26 → 27) |
+| docs                                        | `implementation.md` status tables, `AGENTS.md` tool table, README/CONNECT counts                    |
 
 **Reuse, don't duplicate:** the note-level cosine currently lives in **both**
 `semantic.ts` and `maintenance.ts`. Rather than add a third copy, Phase 1 should
@@ -245,7 +256,9 @@ true` exemption, and that non-skill notes are ignored.
 - **Endpoint** (`routes/skillCurator.test.ts`): preview shape; scan files
   proposals as `agent:curator`; re-running is idempotent (no dupes vs
   pending/rejected); resolution stays human-only.
-- **e2e:** extend the fresh-clone MCP test's tool-count assertion (26 → 27).
+- **e2e:** the fresh-clone MCP test pins the tool surface in **two** places — the
+  sorted `toolNames` array _and_ `tools.length` — so both move 26 → 27; also bump
+  the count stated in `README.md`, `AGENTS.md`, and `CONNECT.md`.
 - No retrieval-eval floors change (this doesn't touch ranking).
 
 ## 7. Alternatives considered
