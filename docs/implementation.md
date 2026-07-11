@@ -5,7 +5,84 @@
 > Keep it accurate: update the status tables when you finish a unit of work.
 > Routed from [`AGENTS.md`](../AGENTS.md).
 
-_Last updated: 2026-07-04 (Mermaid diagrams)_
+_Last updated: 2026-07-07 (embeddings: persisted index + eval)_
+
+> **Latest change.** **Embedding retrieval eval.** The embedding engine now has a
+> regression harness, closing the last open piece of #13. It runs in two layers.
+> **(1) Deterministic, offline (always runs in `npm test`).** A real embedding
+> model can't run in CI (network, key, cost, non-determinism), and a token-overlap
+> eval would prove nothing about _semantic_ retrieval — so a controlled
+> **concept-embedder** test double (`__tests__/fixtures/embeddingEval.ts` —
+> `conceptEmbed`, a curated synonym lexicon projected onto concept axes via the
+> shared `tokenize`) drives the **real** embedding engine over a fixture where
+> each query shares a _concept_ but **zero tokens** with its expected note. This
+> pins the engine's pipeline (chunk → embed → cosine → dedupe → recall/MRR) and
+> proves the semantic-over-lexical win deterministically: embeddings retrieve
+> every case (recall 1, MRR 1) while TF-IDF, a bag-of-words ranker, retrieves
+> **none** (recall 0) — which also guards that the engine really is
+> embedding-based rather than silently falling through to lexical. **(2)
+> Provider-gated live (opt-in).** When `FSBRAIN_EMBEDDINGS` is on with a key, the
+> golden `retrievalCorpus` fixture runs against a real `/api/semantic-search`
+> through a live server and asserts a recall floor; `describe.skip` in CI, where no
+> key is configured. Both reuse the pure `@repo/shared` metric helpers
+> (`scoreEvalCase` / `summarizeEval` / `formatEvalReport`) from #20. Tests:
+> `apps/api` `__tests__/embeddingEval.test.ts`.
+
+> **Latest change.** **Persisted embedding index.** The opt-in embedding engine
+> now **survives restarts** instead of re-embedding the whole vault on every
+> boot. Chunk vectors are cached content-addressed (sha-256 of the chunk's
+> embeddable text → vector) and persisted to `<CONTENT_ROOT>/.fsbrain/embeddings.json`
+> beside the audit / question logs. On startup the engine seeds its in-memory
+> cache from that file, so a reboot re-embeds **only chunks whose text changed**;
+> keying by content (not path) means a moved or renamed note keeps its vectors.
+> The file records the embedding `model`, and loading under a different model
+> discards everything (the vector spaces are incompatible) rather than mixing
+> them — the clean invalidation path when you switch models. Writes are **atomic**
+> (temp file + rename) and the store is **pruned to the live corpus** on each
+> save, so it can't grow unbounded or leave a torn file. Everything stays
+> **best-effort**: a missing / corrupt / wrong-model / wrong-version file loads as
+> empty, and a save failure just means a colder cache next boot — never a failed
+> build. Pure fs I/O in `apps/api/src/embeddings/vectorStore.ts` (`VectorStore`,
+> `createFileVectorStore`), wired through `resolveRetrievalEngine(contentRoot)` →
+> `createEmbeddingsEngine(embed, { store, model })`; the `VaultIndex` gains a
+> `contentRoot` option and the server passes it. TF-IDF (the default) is
+> unaffected — it has no vectors to persist. Tests: `apps/api`
+> `__tests__/vectorStore.test.ts` (round-trip, model-mismatch discard, corrupt /
+> malformed tolerance, atomic overwrite) + persistence cases in
+> `__tests__/retrievalEngine.test.ts` (seed-avoids-re-embed across engine
+> instances, model-change re-embed, no-op-rebuild skips the write, store-throws
+> never fails a build).
+
+> **Latest change.** **Real embeddings** (backlog #13) — an **opt-in** vector
+> engine behind the existing `documents → ranked` seam, with TF-IDF staying the
+> offline default. A new retrieval-engine abstraction
+> (`apps/api/src/index/retrievalEngine.ts`) has two interchangeable
+> implementations: `tfidf` (wraps the offline ranker verbatim) and `embeddings`
+> (chunks the corpus with the _same_ chunker, embeds each chunk via an
+> OpenAI-compatible `/v1/embeddings` provider, ranks by dense cosine). Both
+> return identical `SemanticHit` / `RankedChunk` shapes, so **nothing downstream
+> of the `VaultIndex` changes** — `semantic_search`, `hybrid_search`, `think`, and
+> `get_context` all just get better recall on synonyms/paraphrase when it's on.
+> **The toggle is a single env var**, `FSBRAIN_EMBEDDINGS` (off by default); it
+> also needs `EMBEDDINGS_API_KEY` (falls back to `OPENROUTER_API_KEY`), with
+> optional `EMBEDDINGS_MODEL` / `EMBEDDINGS_URL` / `EMBEDDINGS_BATCH_SIZE`
+> overrides. A **resilient wrapper** falls back to TF-IDF if the provider can't
+> build the index (bad key / no network) and returns no semantic hits (never
+> throws) on a transient per-query embed failure — so lexical + hybrid search,
+> which fuse the untouched full-text engine, always keep working, and "off" is
+> always a working search. Cost is bounded by a **chunk-text → vector cache**
+> (a single-note edit only re-embeds that note's changed chunks; pruned to the
+> live corpus each rebuild) and a bounded **query → vector cache**. The dense
+> ranking math is a pure, offline helper in `@repo/shared` (`embeddings.ts` —
+> `cosineDense`, `chunkDocuments`, `queryEmbeddingIndex`); the only I/O is a tiny
+> `fetch` client (`apps/api/src/embeddings/`) mirroring `think`'s OpenRouter
+> wiring. Persisting the index across restarts remains the documented follow-on.
+> Tests: `apps/api` `__tests__/embeddings.test.ts` (pure cosine/rank/projection)
+> and `__tests__/retrievalEngine.test.ts` (mock embedder: on/off toggle, config
+> gating + `OPENROUTER_API_KEY` fallback, embedding-vs-lexical ranking, cache
+> reuse, build- and query-level fallback); the pre-existing retrieval-eval,
+> semantic, hybrid, and context suites still pass through the refactored
+> `VaultIndex` unchanged.
 
 > **Latest change.** **Mermaid diagrams** (backlog #14) — a fenced
 > ` ```mermaid ` block now renders as an SVG diagram in the preview. The
@@ -21,7 +98,8 @@ _Last updated: 2026-07-04 (Mermaid diagrams)_
 > runtime network. Tests: `apps/web`
 > `__tests__/MarkdownPreviewPane.mermaid.test.tsx` (routing, SVG injection, error
 > fallback, non-mermaid fence still highlighting). With this, both renderer
-> follow-ups are closed; only **real embeddings (#13)** remains open.
+> follow-ups are closed. (Real embeddings (#13) have since shipped opt-in — see
+> the newest entry above.)
 
 > **Latest change.** **Schema packs / typed page types** (backlog #19), the last
 > open item in the gbrain-inspired "Brain ideas" sequence. A pure helper in
@@ -385,7 +463,9 @@ Key facts an agent must know:
 | Rich renderer (GFM, math, highlight)        |   ✅   | `react-markdown` + remark-gfm/math, rehype-katex                                                          |
 | Mermaid diagrams (fenced ` ```mermaid `)    |   ✅   | `MermaidDiagram` (lazy-imported); `pre` renderer routes mermaid fences to SVG, degrades to source         |
 | Full-text + tag search (Ctrl/Cmd-K)         |   ✅   | `/api/search`, `SearchDialog`                                                                             |
-| Semantic (relevance) search                 |   ✅   | `/api/semantic-search`, `semantic.ts` (TF-IDF)                                                            |
+| Semantic (relevance) search                 |   ✅   | `/api/semantic-search`, `semantic.ts` (TF-IDF); opt-in embeddings via `FSBRAIN_EMBEDDINGS`                |
+| Pluggable retrieval engine (TF-IDF ↔ embed) |   ✅   | `index/retrievalEngine.ts`, `embeddings.ts`, `embeddings/`; env toggle + TF-IDF fallback                  |
+| Persisted embedding index (across restarts) |   ✅   | `embeddings/vectorStore.ts` → `.fsbrain/embeddings.json`; content-addressed, model-tagged, atomic         |
 | Hybrid retrieval (RRF fusion)               |   ✅   | `/api/hybrid-search`, `hybrid_search` tool, `hybrid.ts` (`reciprocalRankFusion`)                          |
 | `think` (cited answers + offline gaps)      |   ✅   | `/api/think`, `think` tool, `think.ts` (`assembleAnswerKit`)                                              |
 | Dream-cycle maintenance → proposals         |   ✅   | `/api/maintenance[/scan]`, `run_maintenance`, `maintenance.ts` (`scanVault`)                              |
@@ -598,15 +678,37 @@ polish, mobile, and multi-device sync are **explicitly deprioritized** for now.
 ### Next up (open, in priority order)
 
 The planned roadmap is complete, and with schema packs (#19) shipped the entire
-gbrain-inspired "Brain ideas" sequence (#15–22) is done too. The remaining items
-are optional enhancements, not part of the original plan:
+gbrain-inspired "Brain ideas" sequence (#15–22) is done too. Both original
+enhancement items (real embeddings #13, Mermaid diagrams #14) have now shipped as
+well; the embedding index persists across restarts and is eval-guarded (offline
+and provider-gated), so #13 is complete end to end. The main remaining optional
+item is implicit relevance feedback (#4 in
+[`improvement-ideas.md`](improvement-ideas.md)). These are optional, not part of
+the original plan:
 
-13. **Real embeddings** (the remaining half of RAG). Swap the TF-IDF ranker for
-    vector embeddings (remote `/v1/embeddings` or on-device) behind the existing
-    `documents → ranked` seam — `buildSemanticIndex` / `queryRankedChunks` and
-    the `VaultIndex` cache already isolate callers from the engine, and the
-    context-bundle endpoint consumes ranked chunks regardless of how they were
-    scored. Persist the index across restarts as a follow-on.
+13. **Real embeddings** (the remaining half of RAG). ✅ **Done (opt-in).** A
+    pluggable retrieval-engine seam (`apps/api/src/index/retrievalEngine.ts`)
+    swaps the TF-IDF ranker for **vector embeddings** behind the existing
+    `documents → ranked` contract — `buildSemanticIndex` / `queryRankedChunks`
+    and the `VaultIndex` cache already isolated callers from the engine, so no
+    route changed. The `embeddings` engine chunks the corpus with the same
+    chunker, embeds each chunk via an OpenAI-compatible `/v1/embeddings` provider
+    (tiny `fetch` client in `apps/api/src/embeddings/`, mirroring `think`'s
+    OpenRouter wiring), and ranks by dense cosine (pure `@repo/shared`
+    `embeddings.ts`). It stays **off by default** to preserve the offline/no-key
+    guarantee — enabled by a single env var (`FSBRAIN_EMBEDDINGS`) plus a key
+    (`EMBEDDINGS_API_KEY`, else `OPENROUTER_API_KEY`) — and a resilient wrapper
+    **falls back to TF-IDF** on any provider failure so "off" is always a working
+    search. Chunk-vector and query-vector caches bound the API cost, and the
+    chunk cache is **persisted across restarts** (content-addressed, model-tagged,
+    atomic, best-effort) to `<CONTENT_ROOT>/.fsbrain/embeddings.json` so a reboot
+    re-embeds only changed chunks (`embeddings/vectorStore.ts`). The engine is
+    **eval-guarded** too (extending #20): a deterministic offline concept-embedder
+    proves the semantic-over-lexical win in `npm test`, and a provider-gated live
+    eval measures a real provider on demand — so #13 is complete end to end.
+    Tests: `apps/api` `__tests__/embeddings.test.ts`,
+    `__tests__/retrievalEngine.test.ts`, `__tests__/vectorStore.test.ts`,
+    `__tests__/embeddingEval.test.ts`.
 14. **Mermaid diagrams.** ✅ **Done.** A fenced ` ```mermaid ` block renders as
     an SVG diagram in the preview. The preview's `pre` renderer routes a
     `language === 'mermaid'` fence to a new `MermaidDiagram` component
