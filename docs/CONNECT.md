@@ -33,6 +33,15 @@ Then point your agent host at it — copy one of the snippets below.
 > the default vault location. The path is auto-created. Run `npm run doctor`
 > any time to check that Node is recent enough and the vault is writable.
 
+> **Optional: embedding search.** Semantic retrieval (`semantic_search`,
+> `hybrid_search`, `think`, `get_context`) runs on an offline TF-IDF engine by
+> default — no key, no network. To rank on real vector embeddings instead, set
+> `FSBRAIN_EMBEDDINGS=on` plus `EMBEDDINGS_API_KEY` (or reuse
+> `OPENROUTER_API_KEY`) in the host's `env` block. It falls back to TF-IDF if
+> the provider is unreachable, and unsetting the flag reverts entirely. See the
+> Environment variables section of the [README](../README.md) for the optional
+> `EMBEDDINGS_MODEL` / `EMBEDDINGS_URL` / `EMBEDDINGS_BATCH_SIZE` overrides.
+
 ---
 
 ## Hosts
