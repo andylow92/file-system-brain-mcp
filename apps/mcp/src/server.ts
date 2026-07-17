@@ -729,8 +729,36 @@ function registerTools(server: McpServer, apiRequest: ReturnType<typeof createAp
       'skill for human review (that is how the skill library improves). A skill ' +
       'with frontmatter `pinned: true` is exempt from the duplicate/stale flags. ' +
       'Resolution stays human-only. Returns { findings }.',
-    {},
-    tool(async () => apiRequest<{ findings: SkillCuratorFinding[] }>('/api/skills/curator')),
+    {
+      duplicateThreshold: z
+        .number()
+        .optional()
+        .describe(
+          'Note-level cosine (0-1) at/above which two skills are flagged as duplicates. Default 0.8.',
+        ),
+      staleAfterDays: z
+        .number()
+        .optional()
+        .describe('Flag a skill stale after this many days unchanged. Default 60.'),
+    },
+    tool(
+      async ({
+        duplicateThreshold,
+        staleAfterDays,
+      }: {
+        duplicateThreshold?: number;
+        staleAfterDays?: number;
+      }) => {
+        const params = new URLSearchParams();
+        if (duplicateThreshold !== undefined)
+          params.set('duplicateThreshold', String(duplicateThreshold));
+        if (staleAfterDays !== undefined) params.set('staleAfterDays', String(staleAfterDays));
+        const search = params.toString();
+        return apiRequest<{ findings: SkillCuratorFinding[] }>(
+          `/api/skills/curator${search ? `?${search}` : ''}`,
+        );
+      },
+    ),
   );
 
   register(
