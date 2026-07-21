@@ -2,7 +2,7 @@
    fsbrain web UI — design system
    --------------------------------------------------------------------------
    Register: product (a tool, not a landing page). See PRODUCT.md.
-   Identity: editorial ink-blue canvas + a single champagne accent, Fraunces
+   Identity: graphite macOS chrome + a single system-blue accent, Fraunces
    italic for prose flavor, Inter Tight for UI. Every color below comes from
    the token ramp — an ad-hoc hex anywhere else in this file is a bug.
    ========================================================================== */
@@ -16,48 +16,56 @@
 :root {
   color-scheme: dark;
 
-  /* Ink-blue canvas. The ramp steps are deliberately wide enough that layers
+  /* Graphite canvas. The ramp steps are deliberately wide enough that layers
      read as layers: page < raised (sidebar) < surface (panels) < hover <
      strong (chips, pressed). */
-  --color-bg: #0a0f16;
-  --color-bg-raised: #101724;
-  --color-surface: #17202e;
-  --color-surface-hover: #1f2939;
-  --color-surface-strong: #2b3648;
-  --color-border: rgba(255, 240, 220, 0.075);
-  --color-border-strong: rgba(255, 240, 220, 0.14);
+  --color-bg: #17181b;
+  --color-bg-raised: #1f2125;
+  --color-surface: #26282d;
+  --color-surface-hover: #2f3238;
+  --color-surface-strong: #3a3d44;
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-border-strong: rgba(255, 255, 255, 0.15);
 
-  /* Warm paper white. Muted ≥ 4.5:1 on bg; dim ≥ 4.5:1 (timestamps, hints,
-     placeholders — they are text too). */
-  --color-text: #ece6d9;
-  --color-text-muted: #9d978a;
-  --color-text-dim: #85807a;
+  /* Paper white on graphite. Muted ≥ 4.5:1 on bg; dim ≥ 4.5:1 (timestamps,
+     hints, placeholders — they are text too). */
+  --color-text: #f2f2f5;
+  --color-text-muted: #a1a1a8;
+  --color-text-dim: #8e8e96;
 
-  /* The single signature color: desk-lamp champagne. Spent on primary
-     actions, links, and live state — never on decoration. */
-  --color-accent: #d4a76a;
-  --color-accent-strong: #b88a4f;
-  --color-accent-soft: rgba(212, 167, 106, 0.12);
-  --color-accent-ring: rgba(212, 167, 106, 0.35);
-  --color-on-accent: #1a1206;
+  /* The single signature color: macOS system blue. Spent on primary actions,
+     links, and live state — never on decoration. */
+  --color-accent: #0a84ff;
+  --color-accent-strong: #2f93ff;
+  --color-accent-soft: rgba(10, 132, 255, 0.16);
+  --color-accent-ring: rgba(10, 132, 255, 0.4);
+  --color-on-accent: #ffffff;
+  --color-accent-text: #5eb0ff; /* accent used as text ink on dark */
 
-  --color-success: #7cb89a;
-  --color-success-soft: rgba(124, 184, 154, 0.12);
-  --color-on-success: #12241b;
-  --color-danger: #d97a72;
-  --color-danger-soft: rgba(217, 122, 114, 0.12);
-  --color-on-danger: #1f0807;
+  --color-success: #30d158;
+  --color-success-soft: rgba(48, 209, 88, 0.14);
+  --color-on-success: #052e12;
+  --color-danger: #ff5f57;
+  --color-danger-soft: rgba(255, 95, 87, 0.14);
+  --color-on-danger: #2b0704;
 
   /* Folder/file tints, desaturated so the tree reads as one calm column. */
-  --color-folder: #c8a575;
-  --color-folder-soft: rgba(200, 165, 117, 0.12);
-  --color-folder-ring: rgba(200, 165, 117, 0.28);
-  --color-file: #8d96a8;
-  --color-file-soft: rgba(141, 150, 168, 0.1);
+  --color-folder: #64a8ff;
+  --color-folder-soft: rgba(100, 168, 255, 0.14);
+  --color-folder-ring: rgba(100, 168, 255, 0.3);
+  --color-file: #9298a4;
+  --color-file-soft: rgba(146, 152, 164, 0.1);
   --row-height: 30px;
 
   /* Overlay scrims + code-block inset. */
-  --color-scrim: rgba(6, 9, 14, 0.6);
+  --color-scrim: rgba(0, 0, 0, 0.45);
+
+  /* macOS materials — translucency derived from the ramp tokens. */
+  --material-sidebar: color-mix(in oklab, var(--color-bg-raised) 72%, transparent);
+  --material-topbar: color-mix(in oklab, var(--color-bg) 80%, transparent);
+  --material-popover: color-mix(in oklab, var(--color-surface) 85%, transparent);
+  --material-blur: saturate(1.8) blur(24px);
+  --material-blur-sm: saturate(1.6) blur(16px);
 
   /* Spacing scale (4pt grid). */
   --space-1: 0.25rem;
@@ -72,15 +80,21 @@
   --space-fluid-5: clamp(1rem, 0.7rem + 1.1vw, 1.75rem);
 
   /* Tight, native-feeling radii. */
-  --radius-sm: 4px;
-  --radius-md: 5px;
-  --radius-lg: 8px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
 
   /* Elevation: one shadow per tier, no glow stacks. Borders define panels;
      shadows are reserved for things that float (dialogs, toasts). */
-  --shadow-sm: 0 1px 0 rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 6px 20px -10px rgba(0, 0, 0, 0.55);
-  --shadow-lg: 0 18px 40px -18px rgba(0, 0, 0, 0.7);
+  --shadow-sm: 0 0.5px 1px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.28), 0 8px 24px -8px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.3), 0 16px 48px -12px rgba(0, 0, 0, 0.55);
+
+  /* Syntax-highlight tokens (dark). */
+  --syntax-keyword: #d98a72;
+  --syntax-string: #a8c5a0;
+  --syntax-number: #c9a14a;
+  --syntax-title: #9fb8d1;
 
   /* Semantic z-index. Never a raw number. */
   --z-sticky: 20;
@@ -128,43 +142,50 @@
 
     /* Off-white with chroma toward the ink hue, never toward warmth. Same
        five-step ramp, same job. */
-    --color-bg: #f2f4f7;
-    --color-bg-raised: #e9edf3;
+    --color-bg: #ececef;
+    --color-bg-raised: #e1e2e6;
     --color-surface: #ffffff;
-    --color-surface-hover: #eef1f6;
-    --color-surface-strong: #dce2ec;
-    --color-border: rgba(24, 34, 54, 0.09);
-    --color-border-strong: rgba(24, 34, 54, 0.18);
+    --color-surface-hover: #f2f3f5;
+    --color-surface-strong: #e4e5e9;
+    --color-border: rgba(0, 0, 0, 0.08);
+    --color-border-strong: rgba(0, 0, 0, 0.14);
 
-    --color-text: #1d232e;
-    --color-text-muted: #4f5866;
-    --color-text-dim: #5f6977;
+    --color-text: #1d1d1f;
+    --color-text-muted: #55555b;
+    --color-text-dim: #66666c;
 
-    /* Darker champagne so accent text keeps ≥ 4.5:1 on paper. */
-    --color-accent: #8a5f1f;
-    --color-accent-strong: #6f4a12;
-    --color-accent-soft: color-mix(in oklab, var(--color-accent) 12%, white);
-    --color-accent-ring: color-mix(in oklab, var(--color-accent) 36%, transparent);
-    --color-on-accent: #fffaf0;
+    /* Darker system blue so accent text keeps ≥ 4.5:1 on paper. */
+    --color-accent: #007aff;
+    --color-accent-strong: #0063d1;
+    --color-accent-soft: color-mix(in oklab, var(--color-accent) 10%, white);
+    --color-accent-ring: color-mix(in oklab, var(--color-accent) 35%, transparent);
+    --color-on-accent: #ffffff;
+    --color-accent-text: #0057c7;
 
-    --color-success: #3f7357;
+    --color-success: #248a3d;
     --color-success-soft: color-mix(in oklab, var(--color-success) 14%, white);
     --color-on-success: #f2faf5;
-    --color-danger: #a4444a;
+    --color-danger: #d70015;
     --color-danger-soft: color-mix(in oklab, var(--color-danger) 12%, white);
     --color-on-danger: #fff7f6;
 
-    --color-folder: #96733d;
+    --color-folder: #007aff;
     --color-folder-soft: color-mix(in oklab, var(--color-folder) 12%, white);
     --color-folder-ring: color-mix(in oklab, var(--color-folder) 32%, transparent);
-    --color-file: #5d6787;
+    --color-file: #6e6e73;
     --color-file-soft: color-mix(in oklab, var(--color-file) 10%, white);
 
-    --color-scrim: rgba(24, 34, 54, 0.32);
+    --color-scrim: rgba(0, 0, 0, 0.28);
 
-    --shadow-sm: 0 1px 0 rgba(24, 34, 54, 0.06);
-    --shadow-md: 0 6px 20px -10px rgba(24, 34, 54, 0.25);
-    --shadow-lg: 0 18px 40px -18px rgba(24, 34, 54, 0.35);
+    --shadow-sm: 0 0.5px 1px rgba(0, 0, 0, 0.08);
+    --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.1), 0 8px 24px -8px rgba(0, 0, 0, 0.12);
+    --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.12), 0 16px 48px -12px rgba(0, 0, 0, 0.2);
+
+    /* Syntax-highlight tokens (light). */
+    --syntax-keyword: #a4444a;
+    --syntax-string: #3f7357;
+    --syntax-number: #8a5f1f;
+    --syntax-title: #3d5a80;
   }
 }
 
@@ -235,7 +256,9 @@ body {
   gap: var(--space-4);
   padding: var(--space-3) var(--space-fluid-5);
   border-bottom: 1px solid var(--color-border);
-  background: var(--color-bg);
+  background: var(--material-topbar);
+  backdrop-filter: var(--material-blur-sm);
+  -webkit-backdrop-filter: var(--material-blur-sm);
   position: sticky;
   top: 0;
   z-index: var(--z-sticky);
@@ -324,7 +347,7 @@ body {
 }
 
 .topbar-status.is-dirty {
-  color: var(--color-accent);
+  color: var(--color-accent-text);
 }
 
 .topbar-status.is-dirty::before {
@@ -343,7 +366,7 @@ body {
   font-size: 0.7rem;
   padding: 0.05rem 0.3rem;
   border-radius: var(--radius-sm);
-  background: rgba(12, 15, 24, 0.25);
+  background: color-mix(in oklab, var(--color-on-accent) 20%, transparent);
   color: inherit;
   opacity: 0.8;
 }
@@ -372,7 +395,7 @@ body {
 }
 
 .live-indicator--reconnecting {
-  color: var(--color-accent);
+  color: var(--color-accent-text);
 }
 
 .live-indicator--reconnecting .live-indicator__dot {
@@ -413,7 +436,9 @@ body {
 .left-panel {
   border-right: 1px solid var(--color-border);
   padding: var(--space-4) var(--space-3);
-  background: var(--color-bg-raised);
+  background: var(--material-sidebar);
+  backdrop-filter: var(--material-blur);
+  -webkit-backdrop-filter: var(--material-blur);
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
@@ -489,7 +514,7 @@ body {
 /* Buttons                                                                    */
 /* --------------------------------------------------------------------------
    Three roles:
-   - .save-button  → THE primary action (solid champagne). Spend it on save /
+   - .save-button  → THE primary action (solid system blue). Spend it on save /
      accept / confirm-primary only. (Historical name; it is the primary.)
    - .primary-btn  → secondary ghost (surface + border). Historical name is
      backwards — it styles cancel/close/run-idle-actions.
@@ -719,7 +744,7 @@ select:focus-visible {
 .filter-input:focus-visible {
   border-color: var(--color-accent);
   outline: none;
-  box-shadow: 0 0 0 3px var(--color-accent-soft);
+  box-shadow: 0 0 0 3px var(--color-accent-ring);
 }
 
 .inline-form {
@@ -782,7 +807,7 @@ select:focus-visible {
 .tree-item {
   display: block;
   width: 100%;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   color: var(--color-text-muted);
   position: relative;
   transition:
@@ -888,30 +913,30 @@ select:focus-visible {
   color: var(--color-text);
 }
 
-/* Selected: a whisper of champagne behind the row plus the edge mark — the
-   one place the accent washes a surface, so selection reads instantly. */
+/* Selected: a Finder-style solid blue full-row pill — the one place the
+   accent fills a surface, so selection reads instantly. */
 .tree-item.selected,
 .tree-item.active {
-  background: color-mix(in oklab, var(--color-accent) 10%, transparent);
-  box-shadow: inset 2px 0 0 var(--color-accent);
+  background: var(--color-accent);
+  box-shadow: none;
 }
 
 .tree-item.selected .tree-label,
 .tree-item.active .tree-label {
-  color: var(--color-text);
+  color: var(--color-on-accent);
   font-weight: 600;
 }
 
 .tree-item.selected.tree-item-folder .tree-icon-folder {
-  color: #fff;
-  background: var(--color-folder);
-  box-shadow: 0 0 0 2px var(--color-folder-ring);
+  color: var(--color-on-accent);
+  background: color-mix(in oklab, var(--color-on-accent) 18%, transparent);
+  box-shadow: none;
 }
 
 .tree-item.selected.tree-item-file .tree-icon-file {
-  color: #fff;
-  background: var(--color-accent);
-  box-shadow: 0 0 0 2px var(--color-accent-ring);
+  color: var(--color-on-accent);
+  background: color-mix(in oklab, var(--color-on-accent) 18%, transparent);
+  box-shadow: none;
 }
 
 .tree-item.dragging {
@@ -976,9 +1001,12 @@ select:focus-visible {
   transition: color var(--motion-feedback-fast) var(--ease-standard);
 }
 
-.tree-item:hover .tree-chevron,
-.tree-item.selected .tree-chevron {
+.tree-item:hover .tree-chevron {
   color: var(--color-text);
+}
+
+.tree-item.selected .tree-chevron {
+  color: var(--color-on-accent);
 }
 
 .tree-drag-handle {
@@ -1179,7 +1207,7 @@ select:focus-visible {
 }
 
 .github-markdown a {
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
@@ -1350,7 +1378,7 @@ select:focus-visible {
 
 .code-copy-btn.is-copied {
   opacity: 1;
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   border-color: color-mix(in oklab, var(--color-accent) 35%, var(--color-border));
   background: var(--color-accent-soft);
 }
@@ -1392,14 +1420,14 @@ select:focus-visible {
 
 /* Wikilinks ([[...]]) inside the preview. */
 .markdown-preview .wikilink {
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   text-decoration: none;
   border-bottom: 1px solid var(--color-accent-ring);
   cursor: pointer;
 }
 
 .markdown-preview .wikilink:hover {
-  color: var(--color-accent-strong);
+  color: var(--color-accent-text);
   background: var(--color-accent-soft);
 }
 
@@ -1428,7 +1456,7 @@ select:focus-visible {
 .markdown-preview .block-anchor:hover,
 .markdown-preview .block-anchor:focus {
   opacity: 1;
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   border-color: var(--color-accent-ring);
   background: var(--color-accent-soft);
 }
@@ -1478,7 +1506,7 @@ select:focus-visible {
 }
 
 .preview-copy-btn.is-copied {
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   border-color: color-mix(in oklab, var(--color-accent) 35%, var(--color-border));
   background: var(--color-accent-soft);
 }
@@ -1507,7 +1535,7 @@ select:focus-visible {
 .tag-chip,
 .actor-badge--agent {
   background: var(--color-accent-soft);
-  color: var(--color-accent);
+  color: var(--color-accent-text);
 }
 
 .search-dialog__result-score {
@@ -1625,7 +1653,7 @@ select:focus-visible {
 }
 
 .editor-meta.is-dirty {
-  color: var(--color-accent);
+  color: var(--color-accent-text);
 }
 
 .editor-meta.is-dirty::before {
@@ -1704,14 +1732,14 @@ select:focus-visible {
   padding-inline: 0.7rem;
   border: 1px solid var(--color-border);
   background: var(--color-accent-soft);
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   font-weight: 600;
   letter-spacing: 0.005em;
 }
 
 .fix-format-btn:hover:not(:disabled) {
   background: color-mix(in oklab, var(--color-accent) 20%, var(--color-bg));
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   border-color: color-mix(in oklab, var(--color-accent) 35%, var(--color-border));
 }
 
@@ -1809,7 +1837,9 @@ select:focus-visible {
   align-items: center;
   gap: 0.6rem;
   color: var(--color-text);
-  background: var(--color-surface);
+  background: var(--material-popover);
+  backdrop-filter: var(--material-blur-sm);
+  -webkit-backdrop-filter: var(--material-blur-sm);
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-md);
   padding: 0.6rem 0.85rem;
@@ -1981,7 +2011,7 @@ select:focus-visible {
 }
 
 .settings-hint a {
-  color: var(--color-accent);
+  color: var(--color-accent-text);
 }
 
 .settings-hint code,
@@ -2186,7 +2216,7 @@ select:focus-visible {
 .search-dialog__mode.is-active {
   background: var(--color-accent-soft);
   border-color: var(--color-accent-ring);
-  color: var(--color-accent);
+  color: var(--color-accent-text);
 }
 
 .search-dialog__input {
@@ -2228,7 +2258,16 @@ select:focus-visible {
 }
 
 .search-dialog__result.is-active {
-  background: var(--color-surface-hover);
+  background: var(--color-accent);
+}
+
+.search-dialog__result.is-active .search-dialog__result-name {
+  color: var(--color-on-accent);
+}
+
+.search-dialog__result.is-active .search-dialog__result-path,
+.search-dialog__result.is-active .search-dialog__result-snippet {
+  color: color-mix(in oklab, var(--color-on-accent) 75%, transparent);
 }
 
 .search-dialog__result-name {
@@ -2289,7 +2328,7 @@ select:focus-visible {
   padding: 0;
   border: none;
   background: none;
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   cursor: pointer;
   font: inherit;
 }
@@ -2401,7 +2440,7 @@ select:focus-visible {
   padding: 0;
   border: none;
   background: none;
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   cursor: pointer;
   font: inherit;
 }
@@ -2476,7 +2515,7 @@ select:focus-visible {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   overflow: hidden;
-  /* A soft champagne glow at the centre over a darkened surround — a
+  /* A soft system-blue glow at the centre over a darkened surround — a
      constellation backdrop, not a flat fill. */
   background:
     radial-gradient(
@@ -2512,7 +2551,7 @@ select:focus-visible {
   z-index: 1;
   border: 1px solid var(--color-border-strong);
   border-radius: 999px;
-  background: color-mix(in oklab, var(--color-surface) 80%, transparent);
+  background: var(--material-popover);
   backdrop-filter: blur(8px);
   box-shadow: var(--shadow-md);
 }
@@ -2671,7 +2710,7 @@ select:focus-visible {
   padding: 8px 11px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
-  background: color-mix(in oklab, var(--color-surface) 80%, transparent);
+  background: var(--material-popover);
   backdrop-filter: blur(8px);
   box-shadow: var(--shadow-md);
   font-size: 0.72rem;
@@ -2704,7 +2743,7 @@ select:focus-visible {
 /* -------------------------------------------------------------------------- */
 
 /* The stock theme's base foreground is cold blue-gray; code text takes the
-   warm paper white like everything else. */
+   paper white like everything else. */
 .github-markdown pre code.hljs,
 .github-markdown pre .hljs-subst,
 .github-markdown pre .hljs-emphasis,
@@ -2715,13 +2754,13 @@ select:focus-visible {
 .github-markdown pre .hljs-keyword,
 .github-markdown pre .hljs-selector-tag,
 .github-markdown pre .hljs-built_in {
-  color: #d98a72; /* terracotta, from the graph palette */
+  color: var(--syntax-keyword); /* terracotta, from the graph palette */
 }
 
 .github-markdown pre .hljs-string,
 .github-markdown pre .hljs-attr,
 .github-markdown pre .hljs-template-string {
-  color: #a8c5a0; /* sage-adjacent, quieter than stock green */
+  color: var(--syntax-string); /* sage-adjacent, quieter than stock green */
 }
 
 .github-markdown pre .hljs-comment,
@@ -2735,13 +2774,13 @@ select:focus-visible {
 .github-markdown pre .hljs-variable,
 .github-markdown pre .hljs-template-variable,
 .github-markdown pre .hljs-bullet {
-  color: #c9a14a; /* amber */
+  color: var(--syntax-number); /* amber */
 }
 
 .github-markdown pre .hljs-title,
 .github-markdown pre .hljs-section,
 .github-markdown pre .hljs-name {
-  color: #9fb8d1; /* dusty blue */
+  color: var(--syntax-title); /* dusty blue */
 }
 
 /* Light scheme: the stock dark-theme token colors fail on paper, so swap in
@@ -2750,13 +2789,13 @@ select:focus-visible {
   .github-markdown pre .hljs-keyword,
   .github-markdown pre .hljs-selector-tag,
   .github-markdown pre .hljs-built_in {
-    color: #a4444a;
+    color: var(--syntax-keyword);
   }
 
   .github-markdown pre .hljs-string,
   .github-markdown pre .hljs-attr,
   .github-markdown pre .hljs-template-string {
-    color: #3f7357;
+    color: var(--syntax-string);
   }
 
   .github-markdown pre .hljs-number,
@@ -2764,13 +2803,13 @@ select:focus-visible {
   .github-markdown pre .hljs-variable,
   .github-markdown pre .hljs-template-variable,
   .github-markdown pre .hljs-bullet {
-    color: #8a5f1f;
+    color: var(--syntax-number);
   }
 
   .github-markdown pre .hljs-title,
   .github-markdown pre .hljs-section,
   .github-markdown pre .hljs-name {
-    color: #3d5a80;
+    color: var(--syntax-title);
   }
 
   /* The constellation backdrop was designed for dark; on paper it smears.
