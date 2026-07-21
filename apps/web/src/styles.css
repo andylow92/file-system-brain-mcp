@@ -957,7 +957,7 @@ select:focus-visible {
 }
 
 .tree-item.drop-target.tree-item-folder .tree-icon-folder {
-  color: #fff;
+  color: var(--color-on-accent);
   background: var(--color-folder);
 }
 
@@ -2553,6 +2553,7 @@ select:focus-visible {
   border-radius: 999px;
   background: var(--material-popover);
   backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   box-shadow: var(--shadow-md);
 }
 
@@ -2712,6 +2713,7 @@ select:focus-visible {
   border-radius: var(--radius-sm);
   background: var(--material-popover);
   backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   box-shadow: var(--shadow-md);
   font-size: 0.72rem;
   color: var(--color-text-muted);
