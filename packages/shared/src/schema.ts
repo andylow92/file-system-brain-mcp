@@ -109,7 +109,7 @@ export const DEFAULT_SCHEMA_PACK: SchemaPack = [
   {
     type: 'project',
     label: 'Project',
-    color: '#d4a76a',
+    color: '#0a84ff',
     description: 'A piece of work with an outcome and an owner.',
     relations: [
       { name: 'related' },

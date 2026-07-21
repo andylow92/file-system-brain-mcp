@@ -156,11 +156,11 @@ export function computeAdjacency(graph: GraphData): Map<string, Set<string>> {
 
 /**
  * A curated palette of soft, harmonious colours for tag-based node colouring —
- * chosen to sit alongside the app's warm gold accent on the dark canvas without
- * the clashing neon you get from a raw hash-to-hue.
+ * chosen to sit alongside the app's system-blue accent on the graphite canvas
+ * without the clashing neon you get from a raw hash-to-hue.
  */
 export const GRAPH_TAG_COLORS = [
-  '#d4a76a', // gold (the app accent)
+  '#0a84ff', // system blue (the app accent)
   '#7cb89a', // sage
   '#6fa8c7', // dusty blue
   '#b58bc4', // mauve

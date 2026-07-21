@@ -6,8 +6,8 @@
     <path d="M24 70 H44" stroke="#3a4254" stroke-width="4"/>
     <path d="M24 94 H44" stroke="#3a4254" stroke-width="4"/>
 
-    <!-- Open (yellow) folder -->
-    <path d="M8 32 h12 l4 5 h12 v16 h-28 z" fill="#f6c84e" stroke="#3a4254" stroke-width="3"/>
+    <!-- Open (blue) folder -->
+    <path d="M8 32 h12 l4 5 h12 v16 h-28 z" fill="#64a8ff" stroke="#3a4254" stroke-width="3"/>
     <!-- Blue folder -->
     <path d="M18 62 h10 l3 4 h10 v13 h-23 z" fill="#aacdf2" stroke="#3a4254" stroke-width="2.5"/>
     <!-- Blue folder -->

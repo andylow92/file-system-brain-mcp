@@ -71,7 +71,7 @@ export function MaintenancePanel({ onFiled }: MaintenancePanelProps) {
         </div>
         <button
           type="button"
-          className="save-button"
+          className="primary-btn"
           disabled={loading}
           onClick={() => void handleScan()}
         >
