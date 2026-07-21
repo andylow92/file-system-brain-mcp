@@ -119,7 +119,7 @@ Copy-paste config snippets for OpenClaw / Claude Desktop / Claude Code / Cursor:
 
 `src/__tests__/freshClone.test.ts` spawns the server as a real stdio child
 against a temp `CONTENT_ROOT` and drives it via the official MCP SDK client.
-It asserts `tools/list` returns all 26 expected names, round-trips
+It asserts `tools/list` returns all 27 expected names, round-trips
 `create_note` → `read_note` → `search_notes` → `semantic_search` →
 `hybrid_search` → `think` → `propose_edit` → `list_proposals` → `recent_activity`
 → `run_maintenance`, and confirms the write landed both on disk and in
