@@ -10,6 +10,7 @@ import {
 import type { FileNode } from '@repo/shared';
 import type { LiveStatus } from '../hooks/useVaultEvents';
 import { ModalDialog } from './ModalDialog';
+import { RocketReachSettingsDialog } from './RocketReachSettingsDialog';
 
 const ROOT_DROP_KEY = '__root__';
 
@@ -248,6 +249,7 @@ export function GlobalLayout({
   );
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [pendingDeletePath, setPendingDeletePath] = useState<string | null>(null);
+  const [showIntegrations, setShowIntegrations] = useState(false);
   const draggedPathRef = useRef<string | null>(null);
   const mobileSidebarTriggerRef = useRef<HTMLButtonElement | null>(null);
 
@@ -874,6 +876,23 @@ export function GlobalLayout({
           </span>
           <button
             type="button"
+            className="icon-btn topbar-settings"
+            onClick={() => setShowIntegrations(true)}
+            title="Integrations"
+            aria-label="Integrations settings"
+          >
+            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+              <path
+                d="M8 5.2A2.8 2.8 0 1 0 8 10.8 2.8 2.8 0 0 0 8 5.2Zm6.2 3.6-1.3-.7a5 5 0 0 0 0-.2l1.3-.7a.5.5 0 0 0 .2-.6l-.9-1.6a.5.5 0 0 0-.6-.2l-1.4.5a5 5 0 0 0-.2-.1l-.2-1.5a.5.5 0 0 0-.5-.4H8.9a.5.5 0 0 0-.5.4l-.2 1.5a5 5 0 0 0-.2.1l-1.4-.5a.5.5 0 0 0-.6.2l-.9 1.6a.5.5 0 0 0 .2.6l1.3.7a5 5 0 0 0 0 .2l-1.3.7a.5.5 0 0 0-.2.6l.9 1.6a.5.5 0 0 0 .6.2l1.4-.5a5 5 0 0 0 .2.1l.2 1.5a.5.5 0 0 0 .5.4h1.8a.5.5 0 0 0 .5-.4l.2-1.5a5 5 0 0 0 .2-.1l1.4.5a.5.5 0 0 0 .6-.2l.9-1.6a.5.5 0 0 0-.2-.6Z"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.1"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+          <button
+            type="button"
             className="save-button topbar-save"
             onClick={() => void handleTopSave()}
             disabled={!isDirty}
@@ -886,6 +905,11 @@ export function GlobalLayout({
           </button>
         </div>
       </header>
+
+      <RocketReachSettingsDialog
+        open={showIntegrations}
+        onClose={() => setShowIntegrations(false)}
+      />
 
       <div className={sidebarCollapsed ? 'layout layout--sidebar-collapsed' : 'layout'}>
         <aside

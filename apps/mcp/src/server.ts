@@ -24,6 +24,8 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { createServer as createApiServer, loadConfig, type ServerConfig } from '@repo/api';
 import { z } from 'zod';
 
+import { registerRocketReachTools } from './rocketreach.js';
+
 import type {
   AnswerKit,
   ApiResponse,
@@ -192,7 +194,16 @@ async function maybeSeedWelcome(contentRoot: string): Promise<void> {
   }
 }
 
-function registerTools(server: McpServer, apiRequest: ReturnType<typeof createApiClient>): number {
+interface RegisterOptions {
+  /** When true, also register the optional RocketReach prospect-research tools. */
+  rocketreachEnabled?: boolean;
+}
+
+function registerTools(
+  server: McpServer,
+  apiRequest: ReturnType<typeof createApiClient>,
+  options: RegisterOptions = {},
+): number {
   let count = 0;
   const register = ((...args: Parameters<typeof server.tool>) => {
     count += 1;
@@ -801,15 +812,42 @@ function registerTools(server: McpServer, apiRequest: ReturnType<typeof createAp
     ),
   );
 
+  // Optional integrations — only surfaced when the user has enabled them, so a
+  // vault that does no prospect research never sees these tools.
+  if (options.rocketreachEnabled) {
+    registerRocketReachTools(register, apiRequest);
+  }
+
   return count;
 }
 
 /** Build the MCP server + tool surface against the chosen API base URL. */
-export function buildServer(context: AppContext): { server: McpServer; toolCount: number } {
+export function buildServer(
+  context: AppContext,
+  options: RegisterOptions = {},
+): { server: McpServer; toolCount: number } {
   const apiRequest = createApiClient(context);
   const server = new McpServer({ name: 'fsbrain-vault', version: '0.1.0' });
-  const toolCount = registerTools(server, apiRequest);
+  const toolCount = registerTools(server, apiRequest, options);
   return { server, toolCount };
+}
+
+/**
+ * Ask the API whether an optional integration is enabled, so we only register
+ * its tools when the user has turned it on. Best-effort: any failure (older API
+ * without the route, network blip) leaves the integration off.
+ */
+async function isRocketReachEnabled(apiBaseUrl: string): Promise<boolean> {
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/integrations/rocketreach`);
+    if (!response.ok) {
+      return false;
+    }
+    const payload = (await response.json()) as { success?: boolean; data?: { enabled?: boolean } };
+    return Boolean(payload?.success && payload.data?.enabled);
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -830,7 +868,8 @@ export async function bootstrap(): Promise<{
     context = { apiBaseUrl: baseUrl, contentRoot: config.contentRoot, embeddedServer: server };
     await maybeSeedWelcome(config.contentRoot);
   }
-  const { server, toolCount } = buildServer(context);
+  const rocketreachEnabled = await isRocketReachEnabled(context.apiBaseUrl);
+  const { server, toolCount } = buildServer(context, { rocketreachEnabled });
   return { server, context, toolCount };
 }
 
