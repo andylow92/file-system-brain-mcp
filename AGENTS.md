@@ -66,12 +66,14 @@ the in-process API. Pick the tool that matches your intent:
 | List proposals + their status                          | `list_proposals`    | `GET /api/proposals`         |
 | Review-queue approval rates + threshold nudges         | `proposal_stats`    | `GET /api/proposals/stats`   |
 | List skill notes (procedural playbooks)                | `list_skills`       | `GET /api/skills`            |
+| Curate the skill library (incomplete/dup/stale)        | `curate_skills`     | `GET /api/skills/curator`    |
 | Run the dream-cycle maintenance scan                   | `run_maintenance`   | `POST /api/maintenance/scan` |
 | Learn from reviewed draft→final outreach pairs         | `run_feedback`      | `POST /api/feedback/scan`    |
 
 **Human-only (no MCP tool):** resolving a proposal — `POST /api/proposals/resolve`
 (an `agent:` resolver is rejected `403`). **Live stream:** `GET /api/events` (SSE).
 **Preview maintenance without filing:** `GET /api/maintenance`.
+**Preview the skill curator (report-only):** `GET /api/skills/curator`.
 **Preview the feedback loop without filing:** `GET /api/feedback`.
 
 Rules of thumb: **read/search before writing**; prefer `patch_note` over a full
@@ -161,13 +163,14 @@ Done and on `main`-track (details + status tables in `docs/implementation.md`):
   The pure builder lives in `@repo/shared` (`graph.ts`,
   `extractFrontmatterRelations`); the renderer (`apps/web` `KnowledgeGraph`) is
   lazy-loaded.
-- **MCP server** (`apps/mcp`) — a stdio server exposing 26 vault tools
+- **MCP server** (`apps/mcp`) — a stdio server exposing 27 vault tools
   (`list_notes`, `read_note`, `read_block`, `get_block_anchors`,
   `create_note`, `update_note`, `patch_note`, `search_notes`,
   `semantic_search`, `hybrid_search`, `get_context`, `think`, `get_backlinks`,
   `get_graph`, `schema_pack`, `recent_activity`, `recent_questions`,
   `create_folder`, `move_path`, `delete_path`, `propose_edit`, `list_proposals`,
-  `proposal_stats`, `list_skills`, `run_maintenance`, `run_feedback`). It runs
+  `proposal_stats`, `list_skills`, `curate_skills`, `run_maintenance`,
+  `run_feedback`). It runs
   the storage API **in-process** by default, so it is a single
   self-contained command an MCP host (OpenClaw, Claude Desktop, Claude
   Code, Cursor) can spawn — `npm run start:agent` from the repo root, or
@@ -256,6 +259,20 @@ tools=… · actor=…`) so a host log immediately shows whether the spawn
   non-trivial task, and propose a skill note after learning a reusable
   procedure.** Pure helpers in `@repo/shared` (`skills.ts` — `parseSkill`,
   `listSkills`).
+- **Skill curator (report-only)** — the vault _grows_ skills but nothing
+  _tends_ them, so a deterministic, offline pass (`@repo/shared`
+  `skillCurator.ts`, `curateSkills`) flags skill notes that are structurally
+  `incomplete` (missing canonical sections — When to Use / Procedure /
+  Pitfalls / Verification, with an `update` suggestion that appends stubs),
+  near-`duplicate_skill` (note-level TF-IDF cosine via the shared
+  `similarity.ts`, which the maintenance scan now also uses), and `stale_skill`
+  (unchanged too long — opt-in via `now` + `modifiedAt` mtimes). A skill with
+  frontmatter `pinned: true` is exempt from the duplicate/stale flags.
+  `GET /api/skills/curator` (and the `curate_skills` MCP tool) previews;
+  it **files nothing** — acting on a finding is a `propose_edit` the human
+  approves (Phase 1 of the Hermes-inspired "skill curator"). Tests: `apps/api`
+  `__tests__/skillCurator.test.ts` (pure) + `routes/skillCurator.test.ts`
+  (endpoint).
 - **Schema packs — typed page types** — `@repo/shared` `schema.ts`
   (`DEFAULT_SCHEMA_PACK`) defines canonical note `type:` values (person,
   meeting, project, idea…), each with a colour and the typed **frontmatter**

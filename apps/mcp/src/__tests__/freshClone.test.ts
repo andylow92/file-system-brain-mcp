@@ -97,6 +97,7 @@ describe('fresh-clone MCP end-to-end', () => {
       [
         'create_folder',
         'create_note',
+        'curate_skills',
         'delete_path',
         'get_backlinks',
         'get_block_anchors',
@@ -295,7 +296,7 @@ describe('fresh-clone MCP end-to-end', () => {
     await client.connect(transport);
 
     const { tools } = await client.listTools();
-    expect(tools.length).toBe(26);
+    expect(tools.length).toBe(27);
     expect(tools.map((tool) => tool.name)).toContain('create_note');
     expect(tools.map((tool) => tool.name)).toContain('think');
     expect(tools.map((tool) => tool.name)).toContain('proposal_stats');

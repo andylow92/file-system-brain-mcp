@@ -163,5 +163,7 @@ export * from './retrievalEval.js';
 export * from './schema.js';
 export * from './search.js';
 export * from './semantic.js';
+export * from './similarity.js';
+export * from './skillCurator.js';
 export * from './skills.js';
 export * from './think.js';

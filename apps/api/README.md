@@ -342,6 +342,33 @@ curl "http://localhost:3001/api/skills"
 curl "http://localhost:3001/api/skills?q=release"
 ```
 
+### `GET /api/skills/curator?duplicateThreshold=...&staleAfterDays=...`
+
+A **report-only** curator pass over the vault's skill notes (Phase 1 of the
+Hermes-inspired "skill curator"). Deterministic and offline — it **files
+nothing**; to act on a finding, `POST` a `propose_edit`/proposal so a human
+signs off. Returns `{ findings: SkillCuratorFinding[] }` where each finding is
+one of:
+
+- `incomplete` — the skill is missing canonical sections (When to Use /
+  Procedure / Pitfalls / Verification). Carries `missingSections` and an
+  `update` **suggestion** that appends stubs (never rewrites existing content).
+- `duplicate_skill` — two skills whose bodies are near-duplicates (note-level
+  TF-IDF cosine ≥ `duplicateThreshold`, default `0.8`); carries `score`.
+  Report-only (a merge is a human judgement).
+- `stale_skill` — a skill unchanged for more than `staleAfterDays` (default
+  `60`), derived from file mtime. Report-only.
+
+A skill with frontmatter `pinned: true` is exempt from `duplicate_skill` and
+`stale_skill` (but is still checked for `incomplete`). `duplicateThreshold`
+(0–1) and `staleAfterDays` (positive integer) override the defaults; anything
+unparseable is ignored.
+
+```bash
+curl "http://localhost:3001/api/skills/curator"
+curl "http://localhost:3001/api/skills/curator?duplicateThreshold=0.75&staleAfterDays=30"
+```
+
 ### `GET /api/semantic-search?q=...&limit=...`
 
 Relevance-ranked retrieval. Chunks every note (frontmatter stripped) and ranks

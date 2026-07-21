@@ -25,6 +25,7 @@ import type {
   ScanVaultOptions,
   SchemaPack,
   SearchMatch,
+  SkillCuratorFinding,
   VaultEvent,
 } from '@repo/shared';
 import {
@@ -36,6 +37,7 @@ import {
   assembleContextBundle,
   buildGraph,
   chunkNote,
+  curateSkills,
   ensureNoteId,
   extractBlockAnchors,
   extractWikilinks,
@@ -839,6 +841,60 @@ async function handleListSkills({ res, url, vaultIndex }: RequestContext): Promi
   const documents = await vaultIndex.getDocuments();
   const skills = listSkills(documents, query || undefined);
   sendJson(res, 200, { success: true, data: skills });
+}
+
+/** Parse a `[0,1]` float query param; return undefined when absent/invalid. */
+function parseUnitInterval(raw: string | null): number | undefined {
+  if (raw === null || raw.trim() === '') {
+    return undefined;
+  }
+  const value = Number(raw);
+  return Number.isFinite(value) && value >= 0 && value <= 1 ? value : undefined;
+}
+
+/** Parse a positive-integer query param; return undefined when absent/invalid. */
+function parsePositiveInt(raw: string | null): number | undefined {
+  if (raw === null || raw.trim() === '') {
+    return undefined;
+  }
+  const value = Number(raw);
+  return Number.isInteger(value) && value > 0 ? value : undefined;
+}
+
+/**
+ * GET /api/skills/curator — a report-only pass over the vault's **skill notes**
+ * (frontmatter `type: skill`). It flags skills that are structurally
+ * `incomplete` (missing canonical sections), near-`duplicate_skill` pairs, and
+ * `stale_skill` (unchanged for a long time). Files nothing — to act on a
+ * finding, `propose_edit` the fleshed-out or consolidated skill for human
+ * review. A skill with frontmatter `pinned: true` is exempt from the
+ * duplicate/stale flags. Mirrors `GET /api/maintenance` (a dry preview).
+ *
+ * Query params: `duplicateThreshold` (0–1) and `staleAfterDays` (positive
+ * integer) override the defaults; anything unparseable is ignored.
+ */
+async function handleSkillCuratorPreview({
+  res,
+  url,
+  vaultIndex,
+  pathResolver,
+}: RequestContext): Promise<void> {
+  const documents = await vaultIndex.getDocuments();
+  const modifiedAt = await buildModifiedMap(
+    pathResolver,
+    documents.map((doc) => doc.path),
+  );
+
+  const duplicateThreshold = parseUnitInterval(url.searchParams.get('duplicateThreshold'));
+  const staleAfterDays = parsePositiveInt(url.searchParams.get('staleAfterDays'));
+
+  const findings = curateSkills(documents, {
+    now: new Date().toISOString(),
+    modifiedAt,
+    ...(duplicateThreshold !== undefined ? { duplicateThreshold } : {}),
+    ...(staleAfterDays !== undefined ? { staleAfterDays } : {}),
+  });
+  sendJson<{ findings: SkillCuratorFinding[] }>(res, 200, { success: true, data: { findings } });
 }
 
 async function handleSemanticSearch({ res, url, vaultIndex }: RequestContext): Promise<void> {
@@ -1822,6 +1878,11 @@ export async function handleFileRoutes(
 
   if (req.method === 'GET' && url.pathname === '/api/skills') {
     await executeHandler(context, handleListSkills);
+    return { handled: true };
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/skills/curator') {
+    await executeHandler(context, handleSkillCuratorPreview);
     return { handled: true };
   }
 
