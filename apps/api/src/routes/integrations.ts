@@ -4,13 +4,14 @@ import {
   buildRunRecordNote,
   DEFAULT_MAX_CANDIDATES,
   MAX_CANDIDATES_LIMIT,
+  MAX_LOOKUP_IDS,
+  MAX_LOOKUPS_LIMIT,
   maskApiKey,
   redactSecrets,
   ROCKETREACH_INTAKE_QUESTIONS,
   type ApiResponse,
   type IntegrationState,
   type RocketReachCandidate,
-  type RocketReachContact,
   type RocketReachRunRecord,
   type RocketReachSearchCriteria,
   type RocketReachStatus,
@@ -26,6 +27,7 @@ import {
 import type { AuditLog } from '../storage/auditLog.js';
 import type { FileRepository } from '../storage/fileRepository.js';
 import type { IntegrationStore } from '../storage/integrationStore.js';
+import { StoragePathError } from '../storage/pathResolver.js';
 
 export interface IntegrationRouteDependencies {
   integrationStore: IntegrationStore;
@@ -37,6 +39,8 @@ export interface IntegrationRouteDependencies {
 }
 
 const MAX_ACTOR_LENGTH = 64;
+/** How many suffixed note names to probe before giving up on a pathological vault. */
+const MAX_RUN_NOTE_ATTEMPTS = 100;
 
 function readActor(req: http.IncomingMessage): string {
   const header = req.headers['x-actor'];
@@ -128,7 +132,6 @@ function normalizeCriteria(body: Record<string, unknown>): RocketReachSearchCrit
     keywords: toArray(body.keywords),
     maxCandidates,
     requireWorkEmail: Boolean(body.requireWorkEmail),
-    dedupe: Boolean(body.dedupe),
     save: body.save === 'fsbrain' ? 'fsbrain' : 'none',
     project: typeof body.project === 'string' ? body.project : undefined,
   };
@@ -179,14 +182,27 @@ export async function handleIntegrationRoutes(
     return { ok: true, client: createClient({ apiKey: settings.apiKey }), apiKey: settings.apiKey };
   }
 
-  /** Persist a run as a provenance note; returns the saved path. Best-effort audit/event. */
+  /**
+   * Persist a run as a provenance note; returns the saved path. A prior run is
+   * **never overwritten**: on a path collision (same day + label) a numeric
+   * suffix is probed (`…-2.md`, `…-3.md`, …) until a free name is found, so
+   * every run keeps its own durable, auditable record. Best-effort audit/event.
+   */
   async function saveRun(record: RocketReachRunRecord): Promise<string> {
-    const { path: notePath, content } = buildRunRecordNote(record);
-    try {
-      await deps.repository.createMarkdownFile(notePath, content);
-    } catch {
-      // Already exists (same day + label) — overwrite with the latest run.
-      await deps.repository.updateMarkdownFile(notePath, content);
+    const { path: basePath, content } = buildRunRecordNote(record);
+    let notePath = basePath;
+    for (let attempt = 2; ; attempt += 1) {
+      try {
+        await deps.repository.createMarkdownFile(notePath, content);
+        break;
+      } catch (error: unknown) {
+        const isCollision =
+          error instanceof StoragePathError && error.message === 'File already exists';
+        if (!isCollision || attempt > MAX_RUN_NOTE_ATTEMPTS) {
+          throw error;
+        }
+        notePath = basePath.replace(/\.md$/, `-${attempt}.md`);
+      }
     }
     try {
       await deps.auditLog.record({ actor: record.actor, action: 'create', path: notePath });
@@ -265,10 +281,16 @@ export async function handleIntegrationRoutes(
       }
       const body = await readJsonBody<Record<string, unknown>>(req);
       const criteria = normalizeCriteria(body);
-      const candidates = await resolved.client.search(
+      let candidates = await resolved.client.search(
         criteria,
         criteria.maxCandidates ?? DEFAULT_MAX_CANDIDATES,
       );
+      if (criteria.requireWorkEmail) {
+        // Enforce the recorded criterion: drop candidates the provider marks
+        // as having no work email. Unknown availability is kept — the flag is
+        // a pre-lookup hint the provider does not always send.
+        candidates = candidates.filter((c) => c.hasWorkEmail !== false);
+      }
 
       let savedTo: string | undefined;
       if (criteria.save === 'fsbrain') {
@@ -307,9 +329,21 @@ export async function handleIntegrationRoutes(
         );
         return { handled: true };
       }
-      const maxLookups = Math.floor(maxLookupsRaw);
+      // Clamp to the absolute server-side ceiling — the caller's cap bounds
+      // intent, this bounds blast radius (mirrors MAX_CANDIDATES_LIMIT on the
+      // free path). The clamped overflow is reported as skipped, never spent.
+      const maxLookups = Math.min(Math.floor(maxLookupsRaw), MAX_LOOKUPS_LIMIT);
       if (ids.length === 0) {
         sendError(res, 400, 'bad_request', 'At least one candidate "ids" entry is required.');
+        return { handled: true };
+      }
+      if (ids.length > MAX_LOOKUP_IDS) {
+        sendError(
+          res,
+          400,
+          'bad_request',
+          `No more than ${MAX_LOOKUP_IDS} "ids" per lookup request (got ${ids.length}).`,
+        );
         return { handled: true };
       }
 
@@ -321,7 +355,7 @@ export async function handleIntegrationRoutes(
 
       // Never enrich more than the cap; the overflow is reported, not spent.
       const toEnrich = ids.slice(0, maxLookups);
-      const skipped = ids
+      const overLimit = ids
         .slice(maxLookups)
         .map((id) => ({ id, reason: 'over_lookup_limit' as const }));
 
@@ -331,13 +365,22 @@ export async function handleIntegrationRoutes(
       } catch {
         /* budgeting is advisory; a failed pre-check must not block the lookup */
       }
-      const enriched = await resolved.client.lookup(toEnrich);
+      const { contacts: enriched, failures } = await resolved.client.lookup(toEnrich);
+      // Nothing was enriched → nothing was paid → nothing partial to protect.
+      // Surface the first (causal) failure as a plain error, as before.
+      if (enriched.length === 0 && failures.length > 0) {
+        throw new RocketReachError(failures[0].message, failures[0].code);
+      }
       let creditsAfter: number | undefined;
       try {
         creditsAfter = (await resolved.client.getAccountStatus()).lookupCreditBalance;
       } catch {
         /* advisory */
       }
+
+      // Ids that failed mid-run join the skipped list so the provenance note
+      // reflects them; the contacts that were already paid for are kept.
+      const skipped = [...overLimit, ...failures.map((f) => ({ id: f.id, reason: f.code }))];
 
       const criteria = normalizeCriteria(body);
       const candidates: RocketReachCandidate[] = enriched.map((c) => ({
@@ -359,7 +402,7 @@ export async function handleIntegrationRoutes(
           creditsBefore,
           creditsAfter,
           candidates,
-          enriched: enriched as RocketReachContact[],
+          enriched,
           skipped,
           project: criteria.project,
         });
@@ -371,6 +414,7 @@ export async function handleIntegrationRoutes(
           contacts: enriched,
           enrichedCount: enriched.length,
           skipped,
+          failures,
           creditsBefore,
           creditsAfter,
           ...(savedTo ? { savedTo } : {}),

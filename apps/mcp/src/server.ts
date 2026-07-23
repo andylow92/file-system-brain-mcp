@@ -25,6 +25,7 @@ import { createServer as createApiServer, loadConfig, type ServerConfig } from '
 import { z } from 'zod';
 
 import { registerRocketReachTools } from './rocketreach.js';
+import { wrapToolHandler } from './toolEnvelope.js';
 
 import type {
   AnswerKit,
@@ -110,17 +111,7 @@ function flattenFiles(nodes: FileNode[]): string[] {
 }
 
 /** Wrap a handler so API errors become readable tool errors instead of crashes. */
-function tool<Args>(handler: (args: Args) => Promise<unknown>) {
-  return async (args: Args) => {
-    try {
-      const result = await handler(args);
-      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      return { isError: true, content: [{ type: 'text' as const, text: `Error: ${message}` }] };
-    }
-  };
-}
+const tool = wrapToolHandler;
 
 /**
  * Start an in-process copy of the storage API on 127.0.0.1, ephemeral port (or

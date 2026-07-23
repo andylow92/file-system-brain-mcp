@@ -1,4 +1,4 @@
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -30,7 +30,20 @@ export function loadConfig(): ServerConfig {
   };
 }
 
+/** Internal-state directory inside the vault (audit log, integration settings, …). */
+const INTERNAL_DIR = '.fsbrain';
+
 /** Make sure `CONTENT_ROOT` exists before any storage code touches it. */
 export function ensureContentRoot(contentRoot: string): void {
   mkdirSync(contentRoot, { recursive: true });
+  // `.fsbrain/` holds secrets (integrations.json carries API keys), and the
+  // product encourages version-controlling the vault — seed a catch-all
+  // .gitignore so `git add -A` on the vault can never commit them. An existing
+  // file is left alone in case the user customized it.
+  const internalDir = path.join(contentRoot, INTERNAL_DIR);
+  mkdirSync(internalDir, { recursive: true });
+  const gitignorePath = path.join(internalDir, '.gitignore');
+  if (!existsSync(gitignorePath)) {
+    writeFileSync(gitignorePath, '*\n', 'utf8');
+  }
 }

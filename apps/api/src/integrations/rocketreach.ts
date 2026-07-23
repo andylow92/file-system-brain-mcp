@@ -35,10 +35,27 @@ export class RocketReachError extends Error {
   }
 }
 
+/** One id that could not be enriched. `message` is already key-redacted. */
+export interface RocketReachLookupFailure {
+  id: string;
+  code: string;
+  message: string;
+}
+
+/**
+ * Outcome of a paid lookup batch. Lookups are charged per profile, so a
+ * failure partway through must never discard the contacts that were already
+ * paid for — successes and per-id failures are reported side by side.
+ */
+export interface RocketReachLookupResult {
+  contacts: RocketReachContact[];
+  failures: RocketReachLookupFailure[];
+}
+
 export interface RocketReachClient {
   getAccountStatus(): Promise<RocketReachAccountStatus>;
   search(criteria: RocketReachSearchCriteria, limit: number): Promise<RocketReachCandidate[]>;
-  lookup(ids: string[]): Promise<RocketReachContact[]>;
+  lookup(ids: string[]): Promise<RocketReachLookupResult>;
 }
 
 export interface RocketReachClientOptions {
@@ -184,36 +201,61 @@ export function createRocketReachClient(options: RocketReachClientOptions): Rock
     return profiles.slice(0, limit).map(mapProfile);
   }
 
-  async function lookup(ids: string[]): Promise<RocketReachContact[]> {
+  async function lookupOne(id: string): Promise<RocketReachContact> {
+    // `id` is a RocketReach profile id, not a secret — safe in the query.
+    const payload = await request(`/api/lookupProfile?id=${encodeURIComponent(id)}`, {
+      method: 'GET',
+    });
+    const emails = Array.isArray(payload.emails)
+      ? (payload.emails as unknown[])
+          .map((e) =>
+            typeof e === 'string'
+              ? e
+              : (asString((e as Json)?.email) ?? asString((e as Json)?.value)),
+          )
+          .filter((e): e is string => Boolean(e))
+      : [];
+    const phones = Array.isArray(payload.phones)
+      ? (payload.phones as unknown[])
+          .map((p) => (typeof p === 'string' ? p : asString((p as Json)?.number)))
+          .filter((p): p is string => Boolean(p))
+      : [];
+    return {
+      ...mapProfile(payload),
+      id,
+      emails,
+      phones,
+      status: asString(payload.status),
+    };
+  }
+
+  async function lookup(ids: string[]): Promise<RocketReachLookupResult> {
     const contacts: RocketReachContact[] = [];
-    for (const id of ids) {
-      // `id` is a RocketReach profile id, not a secret — safe in the query.
-      const payload = await request(`/api/lookupProfile?id=${encodeURIComponent(id)}`, {
-        method: 'GET',
-      });
-      const emails = Array.isArray(payload.emails)
-        ? (payload.emails as unknown[])
-            .map((e) =>
-              typeof e === 'string'
-                ? e
-                : (asString((e as Json)?.email) ?? asString((e as Json)?.value)),
-            )
-            .filter((e): e is string => Boolean(e))
-        : [];
-      const phones = Array.isArray(payload.phones)
-        ? (payload.phones as unknown[])
-            .map((p) => (typeof p === 'string' ? p : asString((p as Json)?.number)))
-            .filter((p): p is string => Boolean(p))
-        : [];
-      contacts.push({
-        ...mapProfile(payload),
-        id,
-        emails,
-        phones,
-        status: asString(payload.status),
-      });
+    const failures: RocketReachLookupFailure[] = [];
+    for (const [index, id] of ids.entries()) {
+      try {
+        contacts.push(await lookupOne(id));
+      } catch (error: unknown) {
+        const rrError =
+          error instanceof RocketReachError
+            ? error
+            : new RocketReachError(clean(error instanceof Error ? error.message : 'lookup failed'));
+        failures.push({ id, code: rrError.code, message: rrError.message });
+        // These conditions doom every remaining request too — stop burning
+        // calls (and rate-limit budget) instead of retrying into the wall.
+        if (rrError.code === 'invalid_key' || rrError.code === 'rate_limited') {
+          for (const rest of ids.slice(index + 1)) {
+            failures.push({
+              id: rest,
+              code: 'not_attempted',
+              message: `Not attempted after ${rrError.code}`,
+            });
+          }
+          break;
+        }
+      }
     }
-    return contacts;
+    return { contacts, failures };
   }
 
   return { getAccountStatus, search, lookup };

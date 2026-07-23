@@ -1,9 +1,11 @@
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { MAX_LOOKUP_IDS, MAX_LOOKUPS_LIMIT } from '@repo/shared';
 
 interface ApiResponse<T> {
   success: boolean;
@@ -227,6 +229,31 @@ describe('RocketReach integration routes', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  it('seeds a catch-all .fsbrain/.gitignore so the stored key can never be committed', async () => {
+    const gitignore = await readFile(path.join(contentRoot, '.fsbrain', '.gitignore'), 'utf8');
+    expect(gitignore.trim()).toBe('*');
+  });
+
+  it('search enforces requireWorkEmail by dropping candidates known to lack one', async () => {
+    await enableWithKey();
+    currentFetch = async () =>
+      jsonResponse(200, {
+        profiles: [
+          { id: 'p1', name: 'Has Email', emails: 2 },
+          { id: 'p2', name: 'No Email', emails: 0 },
+          { id: 'p3', name: 'Unknown Email' },
+        ],
+      });
+    const res = await api<{ candidates: Array<{ id: string }>; count: number }>(
+      'POST',
+      '/api/integrations/rocketreach/search',
+      { body: { titles: ['CTO'], requireWorkEmail: true } },
+    );
+    expect(res.status).toBe(200);
+    // Known-no-email is dropped; unknown availability is only a hint and kept.
+    expect(res.body.data!.candidates.map((c) => c.id)).toEqual(['p1', 'p3']);
+  });
+
   it('lookup never enriches more than the cap — the overflow is skipped, not spent', async () => {
     await enableWithKey();
     const lookedUp: string[] = [];
@@ -256,6 +283,120 @@ describe('RocketReach integration routes', () => {
     expect(res.body.data!.contacts[0].emails).toEqual(['p1@work.com']);
   });
 
+  it('clamps a runaway maxLookups to the absolute server-side ceiling', async () => {
+    await enableWithKey();
+    const lookedUp: string[] = [];
+    currentFetch = async (url) => {
+      if (url.includes('/account/')) {
+        return jsonResponse(200, { lookup_credit_balance: 100000 });
+      }
+      const id = new URL(url).searchParams.get('id') ?? '';
+      lookedUp.push(id);
+      return jsonResponse(200, { id, name: `Person ${id}` });
+    };
+    const ids = Array.from({ length: MAX_LOOKUPS_LIMIT + 50 }, (_, i) => `p${i}`);
+    const res = await api<{
+      contacts: unknown[];
+      skipped: Array<{ id: string; reason: string }>;
+    }>('POST', '/api/integrations/rocketreach/lookup', {
+      // A hostile/buggy cap far above the ceiling must not drain the balance.
+      body: { ids, maxLookups: 100000 },
+    });
+    expect(res.status).toBe(200);
+    expect(lookedUp).toHaveLength(MAX_LOOKUPS_LIMIT);
+    expect(res.body.data!.contacts).toHaveLength(MAX_LOOKUPS_LIMIT);
+    expect(res.body.data!.skipped).toHaveLength(50);
+    expect(res.body.data!.skipped.every((s) => s.reason === 'over_lookup_limit')).toBe(true);
+  });
+
+  it('rejects a lookup carrying more ids than the request bound', async () => {
+    await enableWithKey();
+    const ids = Array.from({ length: MAX_LOOKUP_IDS + 1 }, (_, i) => `p${i}`);
+    const res = await api('POST', '/api/integrations/rocketreach/lookup', {
+      body: { ids, maxLookups: 5 },
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error?.code).toBe('bad_request');
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('a mid-loop lookup failure keeps the already-paid results and reports the failure', async () => {
+    await enableWithKey();
+    currentFetch = async (url) => {
+      if (url.includes('/account/')) {
+        return jsonResponse(200, { lookup_credit_balance: 5 });
+      }
+      const id = new URL(url).searchParams.get('id') ?? '';
+      if (id === 'p2') {
+        return jsonResponse(500, { message: 'profile temporarily unavailable' });
+      }
+      return jsonResponse(200, { id, name: `Person ${id}`, emails: [{ email: `${id}@work.com` }] });
+    };
+    const res = await api<{
+      contacts: Array<{ id: string }>;
+      failures: Array<{ id: string; code: string }>;
+      skipped: Array<{ id: string; reason: string }>;
+      savedTo?: string;
+    }>('POST', '/api/integrations/rocketreach/lookup', {
+      body: { ids: ['p1', 'p2', 'p3'], maxLookups: 3, save: 'fsbrain', project: 'partial run' },
+    });
+    expect(res.status).toBe(200);
+    // p1 and p3 were paid for — they must survive p2's failure.
+    expect(res.body.data!.contacts.map((c) => c.id)).toEqual(['p1', 'p3']);
+    expect(res.body.data!.failures).toEqual([
+      expect.objectContaining({ id: 'p2', code: 'rocketreach_error' }),
+    ]);
+    expect(res.body.data!.skipped.map((s) => s.id)).toEqual(['p2']);
+
+    // …and the provenance note still records the run, including the failure.
+    const savedTo = res.body.data!.savedTo;
+    expect(savedTo).toMatch(/^prospects\/.+\.md$/);
+    const note = await api<{ content: string }>(
+      'GET',
+      `/api/file?path=${encodeURIComponent(savedTo!)}`,
+    );
+    expect(note.body.data!.content).toContain('enrichedCount: 2');
+    expect(note.body.data!.content).toContain('## Skipped / failed');
+    expect(note.body.data!.content).toContain('p2 — rocketreach_error');
+  });
+
+  it('stops the lookup loop on a rate limit instead of burning the remaining calls', async () => {
+    await enableWithKey();
+    const lookedUp: string[] = [];
+    currentFetch = async (url) => {
+      if (url.includes('/account/')) {
+        return jsonResponse(200, { lookup_credit_balance: 5 });
+      }
+      const id = new URL(url).searchParams.get('id') ?? '';
+      lookedUp.push(id);
+      if (id === 'p2') {
+        return jsonResponse(429, {});
+      }
+      return jsonResponse(200, { id, name: `Person ${id}` });
+    };
+    const res = await api<{
+      contacts: Array<{ id: string }>;
+      failures: Array<{ id: string; code: string }>;
+    }>('POST', '/api/integrations/rocketreach/lookup', {
+      body: { ids: ['p1', 'p2', 'p3'], maxLookups: 3 },
+    });
+    expect(res.status).toBe(200);
+    expect(lookedUp).toEqual(['p1', 'p2']); // p3 was never attempted
+    expect(res.body.data!.contacts.map((c) => c.id)).toEqual(['p1']);
+    expect(res.body.data!.failures.map((f) => f.code)).toEqual(['rate_limited', 'not_attempted']);
+  });
+
+  it('a lookup where nothing was enriched surfaces the causal error as before', async () => {
+    await enableWithKey();
+    currentFetch = async () => jsonResponse(401, { message: 'unauthorized' });
+    const res = await api('POST', '/api/integrations/rocketreach/lookup', {
+      body: { ids: ['p1', 'p2'], maxLookups: 2 },
+    });
+    expect(res.status).toBe(401);
+    expect(res.body.error?.code).toBe('invalid_key');
+    expect(JSON.stringify(res.body)).not.toContain(API_KEY);
+  });
+
   it('can save a run into the vault with provenance', async () => {
     await enableWithKey();
     currentFetch = async () =>
@@ -280,6 +421,36 @@ describe('RocketReach integration routes', () => {
     expect(note.status).toBe(200);
     expect(note.body.data!.content).toContain('type: prospect-run');
     expect(note.body.data!.content).toContain('Ada Lovelace');
+  });
+
+  it('a same-day, same-label run never overwrites the prior run note', async () => {
+    await enableWithKey();
+    const searchSaving = async (name: string) => {
+      currentFetch = async () => jsonResponse(200, { profiles: [{ id: 'p1', name }] });
+      const res = await api<{ savedTo?: string }>('POST', '/api/integrations/rocketreach/search', {
+        body: { titles: ['CTO'], save: 'fsbrain', project: 'Acme' },
+      });
+      return res.body.data!.savedTo!;
+    };
+
+    const first = await searchSaving('First Candidate');
+    const second = await searchSaving('Second Candidate');
+
+    expect(second).not.toBe(first);
+    expect(second).toMatch(/-2\.md$/);
+
+    // The first run's note is intact — nothing was overwritten.
+    const firstNote = await api<{ content: string }>(
+      'GET',
+      `/api/file?path=${encodeURIComponent(first)}`,
+    );
+    expect(firstNote.body.data!.content).toContain('First Candidate');
+    expect(firstNote.body.data!.content).not.toContain('Second Candidate');
+    const secondNote = await api<{ content: string }>(
+      'GET',
+      `/api/file?path=${encodeURIComponent(second)}`,
+    );
+    expect(secondNote.body.data!.content).toContain('Second Candidate');
   });
 
   it('disabling after enablement makes subsequent calls fail closed', async () => {
