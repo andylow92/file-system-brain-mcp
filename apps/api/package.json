@@ -12,7 +12,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@repo/shared": "0.0.1"
+    "@repo/shared": "0.0.1",
+    "jose": "^6.2.4"
   },
   "devDependencies": {
     "@types/node": "^22.15.3",

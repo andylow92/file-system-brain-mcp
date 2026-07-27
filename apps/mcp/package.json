@@ -17,6 +17,7 @@
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@repo/api": "0.0.1",
     "@repo/shared": "0.0.1",
+    "undici": "^8.9.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {

@@ -13,6 +13,12 @@
  * Run it standalone:
  *   npm --workspace @repo/mcp run start            # in-process API on 127.0.0.1
  *   API_BASE_URL=http://localhost:3001 npm --workspace @repo/mcp run start
+ *
+ * Proxying a shared vault whose optional SPIFFE auth is enabled? Provide
+ * credentials via FSBRAIN_API_TOKEN / FSBRAIN_API_TOKEN_FILE (JWT-SVID) and
+ * FSBRAIN_CLIENT_TLS_* (X.509-SVID mTLS / private CA) — see clientAuth.ts.
+ * The vault then attributes writes to the *verified* identity, ignoring the
+ * self-declared X-Actor.
  */
 import { promises as fs } from 'node:fs';
 import http from 'node:http';
@@ -23,6 +29,8 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { createServer as createApiServer, loadConfig, type ServerConfig } from '@repo/api';
 import { z } from 'zod';
+
+import { configureClientTls, resolveAuthHeader } from './clientAuth.js';
 
 import type {
   AnswerKit,
@@ -79,6 +87,12 @@ function createApiClient(context: AppContext) {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (init?.actor) {
       headers['X-Actor'] = ACTOR;
+    }
+    // Resolved per request so a rotated JWT-SVID token file is picked up
+    // mid-session; embedded mode has none configured and skips this entirely.
+    const authorization = await resolveAuthHeader();
+    if (authorization) {
+      headers['Authorization'] = authorization;
     }
 
     const response = await fetch(`${context.apiBaseUrl}${pathname}`, { ...init, headers });
@@ -824,6 +838,8 @@ export async function bootstrap(): Promise<{
 }> {
   let context: AppContext;
   if (EXPLICIT_API_BASE_URL) {
+    // Client TLS identity/trust for the remote vault, when configured.
+    configureClientTls();
     context = { apiBaseUrl: EXPLICIT_API_BASE_URL };
   } else {
     const { baseUrl, server, config } = await startEmbeddedApi();

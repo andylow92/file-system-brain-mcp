@@ -105,6 +105,17 @@ in your notes goes through a **review queue you approve**.
   restart re-embeds only changed notes, and the engine **falls back to TF-IDF**
   on any provider outage — "off" is always a working search. See the
   `FSBRAIN_EMBEDDINGS` env vars below.
+- **🛡️ NEW — Share one vault across machines (optional SPIFFE auth).** The MCP
+  server already proxies a remote API (`API_BASE_URL`), so several agents on
+  different networks can share **one** vault — one search index, one review
+  queue, one audit log. Flip on the optional auth layer (shield icon →
+  _Vault access_) and remote requests must present a **[SPIFFE](https://spiffe.io)
+  identity** (JWT-SVID bearer token or mTLS certificate); every write is then
+  attributed to the **verified** identity, not a self-declared header.
+  **Off by default** — a local vault never sees any of it, and loopback stays
+  exempt so the web UI and embedded agents keep working with zero setup. Works
+  with plain keypairs today, drop-in SPIRE later — see
+  [`docs/distributed-auth.md`](docs/distributed-auth.md).
 - **🪄 NEW — Learns from your edits (feedback loop).** When an agent drafts
   outreach — an **X post, LinkedIn message, or email** — and you rewrite it
   before sending, that edit is valuable signal. A scan compares the **draft vs.
@@ -271,6 +282,21 @@ For `apps/api`:
     demand) and is tagged with the model, so switching `EMBEDDINGS_MODEL`
     invalidates it automatically.
 
+- `HOST`
+  - Optional bind address (e.g. `0.0.0.0` to share the API over a VPN/tailnet).
+- `FSBRAIN_TLS_CERT` / `FSBRAIN_TLS_KEY` / `FSBRAIN_TLS_CLIENT_CA`
+  - Optional HTTPS (and, with the client CA, mTLS X.509-SVID auth) for a shared
+    vault. Unset by default — plain HTTP, exactly as before. PEM files are
+    watched and hot-reloaded on rotation. See
+    [`docs/distributed-auth.md`](docs/distributed-auth.md).
+
+For `apps/mcp` (proxied mode against a shared, auth-enabled vault):
+
+- `FSBRAIN_API_TOKEN` / `FSBRAIN_API_TOKEN_FILE`
+  - JWT-SVID bearer credential (the file variant is re-read on rotation).
+- `FSBRAIN_CLIENT_TLS_CERT` / `FSBRAIN_CLIENT_TLS_KEY` / `FSBRAIN_CLIENT_TLS_CA`
+  - Client mTLS identity and/or a private CA to trust for the server.
+
 Example:
 
 ```bash
@@ -316,6 +342,11 @@ FSBRAIN_EMBEDDINGS=on EMBEDDINGS_API_KEY=sk-... npm run dev:api
 
 - `GET /api/events` (Server-Sent Events)
 
+**Vault access (optional SPIFFE auth — off by default)**
+
+- `GET /api/auth` (status + "who am I") · `PUT /api/auth` (owner/admin only)
+- `POST /api/auth/test` (dry-run verification of a JWT-SVID)
+
 For endpoint details and request/response examples, see [`apps/api/README.md`](apps/api/README.md).
 Agents typically reach these via the MCP tools — see [`apps/mcp/README.md`](apps/mcp/README.md).
 
@@ -336,6 +367,11 @@ npm run format
 - API path handling rejects traversal and absolute paths.
 - File operations are markdown-focused (`.md`).
 - Storage resolution ensures requests remain within `CONTENT_ROOT`.
+- The API trusts its network by default (local-first). Before exposing it
+  beyond localhost/VPN, enable the optional **SPIFFE auth layer** — remote
+  requests then require a verified identity, writes are attributed to it, and
+  auth settings themselves are changeable only from the vault's machine or by
+  an `admin` identity. See [`docs/distributed-auth.md`](docs/distributed-auth.md).
 
 This helps protect the host filesystem while still enabling file-based workflows.
 
@@ -384,6 +420,7 @@ PRs are welcome. If you want to contribute:
 - Backend API details: [`apps/api/README.md`](apps/api/README.md)
 - Agent tools (MCP) + write attribution: [`apps/mcp/README.md`](apps/mcp/README.md)
 - Connect an MCP host (OpenClaw / Claude / Cursor): [`docs/CONNECT.md`](docs/CONNECT.md)
+- Share one vault across machines + SPIFFE auth: [`docs/distributed-auth.md`](docs/distributed-auth.md)
 - Manual integration validation: [`docs/integration-test-plan.md`](docs/integration-test-plan.md)
 
 ---
