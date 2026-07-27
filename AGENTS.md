@@ -334,6 +334,26 @@ person`). `GET /api/schema` (and the `schema_pack` MCP tool) returns
   offline (a controlled concept-embedder retrieves cases that share a concept but
   **zero tokens** with the query; TF-IDF retrieves none).
 
+- **Optional SPIFFE auth for shared vaults** — an opt-in identity layer so one
+  vault (one index, one review queue, one audit log) can serve agents on other
+  machines. **Off by default**: a request-time guard (`apps/api/src/auth/`)
+  waves everything through until the owner enables it (shield icon → _Vault
+  access_, or `PUT /api/auth`; settings persist to `.fsbrain/auth.json` with
+  owner-only perms, changeable only from loopback or by an `admin` identity —
+  even while disabled, remote callers cannot touch them). When enabled,
+  loopback stays exempt (`allowLoopback`, default on) so the local web UI and
+  the **embedded** MCP keep working; remote requests must present a verified
+  **SPIFFE identity** — a JWT-SVID bearer (verified via jose against an
+  inline/file/URL JWKS, rotation-aware) or an mTLS X.509-SVID (server TLS via
+  `FSBRAIN_TLS_*`, SAN-URI extraction, hot PEM reload). The verified id
+  **replaces `X-Actor`**, so audit/events/proposals attribute to a
+  cryptographic identity, and access rules (`exact`/`prefix` →
+  `read`/`readwrite`/`admin`, plus `defaultAccess`) gate reads vs. writes per
+  request. The proxied MCP client sends credentials via `FSBRAIN_API_TOKEN` /
+  `FSBRAIN_API_TOKEN_FILE` (mtime-refreshed) and `FSBRAIN_CLIENT_TLS_*`
+  (`apps/mcp/src/clientAuth.ts`). Setup recipes (plain keypair, SPIRE, mTLS):
+  `docs/distributed-auth.md`.
+
 **Not yet built (next):** see the roadmap in `docs/implementation.md` — the
 core retrieval and self-improvement surface (search, embeddings, RAG, `think`,
 maintenance, feedback) is now in place.

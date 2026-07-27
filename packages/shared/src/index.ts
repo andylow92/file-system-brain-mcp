@@ -29,7 +29,8 @@ export type ApiResponse<T> = ApiSuccess<T> | ApiError;
 
 export interface HealthResponse {
   status: 'ok';
-  contentRoot: string;
+  /** Omitted for remote callers when SPIFFE auth is enabled (server-path privacy). */
+  contentRoot?: string;
   timestamp: string;
 }
 
@@ -147,6 +148,7 @@ export interface EditProposal {
   resolvedBy?: string;
 }
 
+export * from './auth.js';
 export * from './blocks.js';
 export * from './context.js';
 export * from './embeddings.js';

@@ -1957,6 +1957,90 @@ select:focus-visible {
   width: min(100%, 480px);
 }
 
+.auth-settings {
+  width: min(100%, 560px);
+  max-height: min(88vh, 720px);
+  overflow-y: auto;
+}
+
+.settings-toggle {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.settings-toggle input {
+  width: auto;
+}
+
+.settings-field select,
+.settings-field textarea {
+  width: 100%;
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-bg);
+  color: var(--color-text);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.65rem;
+  font-family: var(--font-mono);
+  font-size: var(--type-label);
+}
+
+.settings-error {
+  color: var(--color-danger);
+}
+
+.auth-rule-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.auth-rule-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.auth-rule-id {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  background: var(--color-surface);
+  padding: 0.1em 0.35em;
+  border-radius: 3px;
+  border: 1px solid var(--color-border);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.auth-rule-meta {
+  flex-shrink: 0;
+  font-size: var(--type-caption);
+  color: var(--color-text-dim);
+}
+
+.auth-rule-add {
+  display: flex;
+  gap: var(--space-2);
+  align-items: stretch;
+}
+
+.auth-rule-add input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.auth-rule-add select,
+.auth-rule-add button {
+  flex-shrink: 0;
+}
+
 .settings-form {
   display: flex;
   flex-direction: column;

@@ -130,7 +130,9 @@ export interface FileRouteDependencies {
   vaultIndex: VaultIndex;
 }
 
-const MAX_ACTOR_LENGTH = 64;
+// Long enough for a verified SPIFFE ID (the auth guard rewrites X-Actor to
+// e.g. `spiffe://trust.domain/agent/name` for authenticated remote agents).
+const MAX_ACTOR_LENGTH = 256;
 
 function readActor(req: http.IncomingMessage): string {
   const header = req.headers['x-actor'];

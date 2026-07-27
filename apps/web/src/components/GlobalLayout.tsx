@@ -9,6 +9,7 @@ import {
 } from 'react';
 import type { FileNode } from '@repo/shared';
 import type { LiveStatus } from '../hooks/useVaultEvents';
+import { AuthSettingsDialog } from './AuthSettingsDialog';
 import { ModalDialog } from './ModalDialog';
 
 const ROOT_DROP_KEY = '__root__';
@@ -45,6 +46,20 @@ function IconMenu() {
   return (
     <svg viewBox="0 0 16 16" aria-hidden="true">
       <path d="M2 4h12M2 8h12M2 12h12" fill="none" stroke="currentColor" strokeWidth="1.5" />
+    </svg>
+  );
+}
+
+function IconShield() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path
+        d="M8 1.75 13.25 3.6v3.6c0 3.3-2.2 5.8-5.25 7.05C4.95 13 2.75 10.5 2.75 7.2V3.6L8 1.75Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
@@ -248,6 +263,7 @@ export function GlobalLayout({
   );
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [pendingDeletePath, setPendingDeletePath] = useState<string | null>(null);
+  const [authSettingsOpen, setAuthSettingsOpen] = useState(false);
   const draggedPathRef = useRef<string | null>(null);
   const mobileSidebarTriggerRef = useRef<HTMLButtonElement | null>(null);
 
@@ -869,6 +885,15 @@ export function GlobalLayout({
               {liveStatus === 'reconnecting' ? 'Reconnecting' : 'Live'}
             </span>
           ) : null}
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={() => setAuthSettingsOpen(true)}
+            aria-label="Vault access settings"
+            title="Vault access (SPIFFE auth)"
+          >
+            <IconShield />
+          </button>
           <span className={isDirty ? 'topbar-status is-dirty' : 'topbar-status'}>
             {isDirty ? 'Unsaved' : 'Saved'}
           </span>
@@ -1216,6 +1241,8 @@ export function GlobalLayout({
           </div>
         ))}
       </div>
+
+      <AuthSettingsDialog open={authSettingsOpen} onClose={() => setAuthSettingsOpen(false)} />
 
       <ModalDialog
         open={Boolean(pendingDeleteNode)}
