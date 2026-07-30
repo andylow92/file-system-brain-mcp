@@ -23,6 +23,7 @@ import {
  */
 
 const DEFAULT_BASE_URL = 'https://api.rocketreach.co/v2';
+const NON_JSON_ERROR_DETAIL_LIMIT = 500;
 
 export class RocketReachError extends Error {
   constructor(
@@ -92,11 +93,12 @@ export function createRocketReachClient(options: RocketReachClientOptions): Rock
 
     const text = await response.text();
     let payload: Json = {};
+    let nonJsonErrorDetail: string | undefined;
     if (text) {
       try {
         payload = JSON.parse(text) as Json;
       } catch {
-        payload = { message: text };
+        nonJsonErrorDetail = text.slice(0, NON_JSON_ERROR_DETAIL_LIMIT);
       }
     }
 
@@ -112,7 +114,11 @@ export function createRocketReachClient(options: RocketReachClientOptions): Rock
         throw new RocketReachError('RocketReach rate limit exceeded', 'rate_limited', 429);
       }
       const detail =
-        asString(payload.message) ?? asString(payload.detail) ?? `HTTP ${response.status}`;
+        asString(payload.message) ??
+        asString(payload.detail) ??
+        (nonJsonErrorDetail
+          ? `HTTP ${response.status} from RocketReach: ${nonJsonErrorDetail}`
+          : `HTTP ${response.status} from RocketReach`);
       throw new RocketReachError(
         `RocketReach error: ${clean(detail)}`,
         'rocketreach_error',
@@ -143,7 +149,7 @@ export function createRocketReachClient(options: RocketReachClientOptions): Rock
   }
 
   async function getAccountStatus(): Promise<RocketReachAccountStatus> {
-    const payload = await request('/account/', { method: 'GET' });
+    const payload = await request('/api/account', { method: 'GET' });
     return {
       plan: asString(payload.plan) ?? asString((payload.subscription as Json)?.plan_name),
       lookupCreditBalance:

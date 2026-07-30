@@ -159,7 +159,7 @@ describe('RocketReach integration routes', () => {
   it('reports account status and credits with a valid key', async () => {
     await enableWithKey();
     currentFetch = async (url) => {
-      expect(url).toContain('/account/');
+      expect(url).toBe('https://rocketreach.test/v2/api/account');
       return jsonResponse(200, { name: 'Ada', plan: 'pro', lookup_credit_balance: 42 });
     };
     const res = await api<{ connected: boolean; account: { lookupCreditBalance: number } }>(
@@ -187,6 +187,19 @@ describe('RocketReach integration routes', () => {
     expect(res.body.error).toBeTruthy();
     expect(JSON.stringify(res.body)).not.toContain(API_KEY);
     expect(res.body.error?.message).toContain('redacted');
+  });
+
+  it('caps non-JSON provider error details before returning them', async () => {
+    await enableWithKey();
+    currentFetch = async () =>
+      new Response(`<html>${'x'.repeat(1_000)}</html>`, {
+        status: 500,
+        headers: { 'Content-Type': 'text/html' },
+      });
+    const res = await api('POST', '/api/integrations/rocketreach/test');
+    expect(res.status).toBe(502);
+    expect(res.body.error?.message).toContain('HTTP 500 from RocketReach');
+    expect(res.body.error!.message.length).toBeLessThan(600);
   });
 
   it('search returns mapped candidates and spends no lookup credits', async () => {
@@ -231,7 +244,7 @@ describe('RocketReach integration routes', () => {
     await enableWithKey();
     const lookedUp: string[] = [];
     currentFetch = async (url) => {
-      if (url.includes('/account/')) {
+      if (url.includes('/api/account')) {
         return jsonResponse(200, { lookup_credit_balance: 5 });
       }
       const id = new URL(url).searchParams.get('id') ?? '';
