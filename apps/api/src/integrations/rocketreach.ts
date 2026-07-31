@@ -148,14 +148,43 @@ export function createRocketReachClient(options: RocketReachClientOptions): Rock
     };
   }
 
+  /**
+   * Remaining paid lookup credits. The live v2 account payload reports these in
+   * a `credit_usage` array keyed by `credit_type` — `standard_lookup` is the one
+   * `lookup()` spends. `remaining` is not always a number there (unlimited
+   * allowances come back as the string `"inf"`), which reads as "no cap", not
+   * "no credits". The flat fields are kept as fallbacks for tiers that expose
+   * them, so budgeting keeps working whichever shape an account returns.
+   */
+  function readLookupCredits(payload: Json): number | undefined {
+    const usage = payload.credit_usage;
+    if (Array.isArray(usage)) {
+      const row = usage.find((entry) => (entry as Json)?.credit_type === 'standard_lookup') as
+        | Json
+        | undefined;
+      if (row) {
+        if (row.remaining === 'inf') return Infinity;
+        const remaining = asNumber(row.remaining);
+        if (remaining != null) return remaining;
+      }
+    }
+    return (
+      asNumber(payload.lookup_credit_balance) ??
+      asNumber(payload.lookupCreditBalance) ??
+      asNumber(payload.credits)
+    );
+  }
+
   async function getAccountStatus(): Promise<RocketReachAccountStatus> {
     const payload = await request('/api/account', { method: 'GET' });
     return {
-      plan: asString(payload.plan) ?? asString((payload.subscription as Json)?.plan_name),
-      lookupCreditBalance:
-        asNumber(payload.lookup_credit_balance) ??
-        asNumber(payload.lookupCreditBalance) ??
-        asNumber(payload.credits),
+      // Free/unsubscribed accounts carry no plan name, only an account `state`
+      // (e.g. `registered`) — surface that rather than reporting nothing.
+      plan:
+        asString(payload.plan) ??
+        asString((payload.subscription as Json)?.plan_name) ??
+        asString(payload.state),
+      lookupCreditBalance: readLookupCredits(payload),
       accountName: asString(payload.name) ?? asString(payload.email),
     };
   }

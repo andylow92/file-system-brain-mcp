@@ -170,6 +170,31 @@ describe('RocketReach integration routes', () => {
     expect(res.body.data).toMatchObject({ connected: true, account: { lookupCreditBalance: 42 } });
   });
 
+  // The live v2 payload reports credits in `credit_usage`, not a flat balance —
+  // reading only the flat fields left every credit figure undefined.
+  it('reads lookup credits from the live credit_usage shape', async () => {
+    await enableWithKey();
+    currentFetch = async () =>
+      jsonResponse(200, {
+        email: 'someone@example.com',
+        state: 'registered',
+        credit_usage: [
+          { credit_type: 'standard_lookup', allocated: 5, used: 2, remaining: 3 },
+          { credit_type: 'company_export', allocated: 5, used: 0, remaining: 5 },
+          { credit_type: 'person_export', allocated: 'inf', used: 0, remaining: 'inf' },
+        ],
+      });
+    const res = await api<{ account: { lookupCreditBalance: number; plan: string } }>(
+      'POST',
+      '/api/integrations/rocketreach/test',
+    );
+    expect(res.status).toBe(200);
+    // 3 from standard_lookup — not company_export's 5, and not undefined.
+    expect(res.body.data).toMatchObject({
+      account: { lookupCreditBalance: 3, plan: 'registered' },
+    });
+  });
+
   it('surfaces an invalid key as 401 without leaking the key', async () => {
     await enableWithKey();
     currentFetch = async () => jsonResponse(401, { message: 'unauthorized' });
