@@ -32,9 +32,7 @@ const API_ENTRY = join(REPO, 'apps', 'api', 'src', 'main.ts');
 const PUBLIC_PORT = Number(process.env.CEREBRO_PORT ?? 2800);
 const API_PORT = Number(process.env.CEREBRO_API_PORT ?? 3001);
 const API_HOST = '127.0.0.1';
-const CONTENT_ROOT =
-  process.env.CONTENT_ROOT ??
-  join(REPO, '..', 'memory'); // -> eigenoid-org/cerebro/memory
+const CONTENT_ROOT = process.env.CONTENT_ROOT ?? join(REPO, '..', 'memory'); // -> eigenoid-org/cerebro/memory
 
 // --- spawn the API server as a child ---------------------------------------
 const api = spawn(process.execPath, [TSX_CLI, API_ENTRY], {
