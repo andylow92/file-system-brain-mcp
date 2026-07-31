@@ -1953,8 +1953,28 @@ select:focus-visible {
   }
 }
 
-.openrouter-settings {
+.openrouter-settings,
+.rocketreach-settings {
   width: min(100%, 480px);
+}
+
+.settings-toggle {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.settings-toggle input {
+  width: auto;
+}
+
+.settings-ok {
+  color: var(--color-success);
+}
+
+.settings-error {
+  color: var(--color-danger);
 }
 
 .settings-form {

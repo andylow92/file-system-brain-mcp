@@ -13,7 +13,10 @@ import {
   runMaintenanceScan,
   type PatchFileResponse,
 } from './routes/files.js';
+import { handleIntegrationRoutes } from './routes/integrations.js';
+import type { RocketReachClient, RocketReachClientOptions } from './integrations/rocketreach.js';
 import { createAuditLog } from './storage/auditLog.js';
+import { createIntegrationStore } from './storage/integrationStore.js';
 import { createFileRepository } from './storage/fileRepository.js';
 import { createIdempotencyCache } from './storage/idempotencyCache.js';
 import { createPathResolver } from './storage/pathResolver.js';
@@ -23,13 +26,26 @@ import { createQuestionLog } from './storage/questionLog.js';
 export { loadConfig, ensureContentRoot, defaultContentRoot } from './config.js';
 export type { ServerConfig } from './config.js';
 
-export function createServer(config = loadConfig()): http.Server {
+export interface CreateServerOptions {
+  /**
+   * Override the RocketReach client factory. Production leaves this unset (the
+   * real HTTPS client is used); tests inject a stub / a client with a fake
+   * `fetch` so the suite never touches the network.
+   */
+  createRocketReachClient?: (options: RocketReachClientOptions) => RocketReachClient;
+}
+
+export function createServer(
+  config = loadConfig(),
+  options: CreateServerOptions = {},
+): http.Server {
   ensureContentRoot(config.contentRoot);
   const pathResolver = createPathResolver(config.contentRoot);
   const repository = createFileRepository(pathResolver);
   const auditLog = createAuditLog(config.contentRoot);
   const proposalStore = createProposalStore(config.contentRoot);
   const questionLog = createQuestionLog(config.contentRoot);
+  const integrationStore = createIntegrationStore(config.contentRoot);
   const patchIdempotency = createIdempotencyCache<PatchFileResponse>();
   const eventBus = createEventBus();
   // Surface out-of-band edits (direct file writes, git, another process) so the
@@ -112,6 +128,19 @@ export function createServer(config = loadConfig()): http.Server {
       vaultIndex,
     });
     if (routeResult.handled) {
+      return;
+    }
+
+    // Optional third-party integrations (RocketReach, …). Their routes live
+    // under /api/integrations and are inert unless the user enables them.
+    const integrationResult = await handleIntegrationRoutes(req, res, {
+      integrationStore,
+      repository,
+      auditLog,
+      eventBus,
+      createRocketReachClient: options.createRocketReachClient,
+    });
+    if (integrationResult.handled) {
       return;
     }
 

@@ -153,6 +153,7 @@ export * from './embeddings.js';
 export * from './feedback.js';
 export * from './graph.js';
 export * from './hybrid.js';
+export * from './integrations.js';
 export * from './maintenance.js';
 export * from './markdown.js';
 export * from './noteId.js';
