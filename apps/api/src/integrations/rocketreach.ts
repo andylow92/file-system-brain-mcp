@@ -170,12 +170,14 @@ export function createRocketReachClient(options: RocketReachClientOptions): Rock
       const row = usage.find((entry) => (entry as Json)?.credit_type === 'standard_lookup') as
         Json | undefined;
       if (row) {
-        if (row.remaining === 'inf' || row.allocated === 'inf') {
-          return ROCKETREACH_UNLIMITED_CREDITS;
-        }
+        if (row.remaining === 'inf') return ROCKETREACH_UNLIMITED_CREDITS;
         const remaining = asNumber(row.remaining);
+        // A concrete `remaining` wins over an `inf` allowance below: reading a
+        // real cap as uncapped would let an agent spend past its budget, so the
+        // more restrictive figure is always preferred.
         if (remaining != null) return remaining;
         // Some tiers report the allowance and the spend but no `remaining`.
+        if (row.allocated === 'inf') return ROCKETREACH_UNLIMITED_CREDITS;
         const allocated = asNumber(row.allocated);
         const used = asNumber(row.used);
         if (allocated != null && used != null) return Math.max(0, allocated - used);

@@ -236,6 +236,19 @@ describe('RocketReach integration routes', () => {
     expect(res.body.data?.account.lookupCreditBalance).toBe(6);
   });
 
+  // Never read a real cap as uncapped — that would let an agent spend past a
+  // budget it was told to respect.
+  it('prefers a concrete remaining count over an "inf" allocation', async () => {
+    await enableWithKey();
+    currentFetch = async () =>
+      jsonResponse(200, {
+        email: 'someone@example.com',
+        credit_usage: [{ credit_type: 'standard_lookup', allocated: 'inf', used: 1, remaining: 5 }],
+      });
+    const res = await api<{ account: AccountBody }>('POST', '/api/integrations/rocketreach/test');
+    expect(res.body.data?.account.lookupCreditBalance).toBe(5);
+  });
+
   it('surfaces an invalid key as 401 without leaking the key', async () => {
     await enableWithKey();
     currentFetch = async () => jsonResponse(401, { message: 'unauthorized' });
