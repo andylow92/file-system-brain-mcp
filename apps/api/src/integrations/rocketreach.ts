@@ -1,8 +1,10 @@
 import {
   redactSecrets,
+  ROCKETREACH_UNLIMITED_CREDITS,
   type RocketReachAccountStatus,
   type RocketReachCandidate,
   type RocketReachContact,
+  type RocketReachCreditBalance,
   type RocketReachSearchCriteria,
 } from '@repo/shared';
 
@@ -151,21 +153,32 @@ export function createRocketReachClient(options: RocketReachClientOptions): Rock
   /**
    * Remaining paid lookup credits. The live v2 account payload reports these in
    * a `credit_usage` array keyed by `credit_type` — `standard_lookup` is the one
-   * `lookup()` spends. `remaining` is not always a number there (unlimited
-   * allowances come back as the string `"inf"`), which reads as "no cap", not
-   * "no credits". The flat fields are kept as fallbacks for tiers that expose
-   * them, so budgeting keeps working whichever shape an account returns.
+   * `lookup()` spends, and `company_export` sits next to it with an
+   * identical-looking balance, so the row must be selected by type, not position.
+   *
+   * `remaining` is not always a number: an uncapped allowance comes back as the
+   * string `"inf"`, which would otherwise read as "no credits" — the exact
+   * opposite of the truth — so it maps to the `'unlimited'` sentinel, which
+   * survives both JSON and YAML (see {@link RocketReachCreditBalance}).
+   *
+   * The flat fields are kept as fallbacks for tiers that expose them, so
+   * budgeting keeps working whichever shape an account returns.
    */
-  function readLookupCredits(payload: Json): number | undefined {
+  function readLookupCredits(payload: Json): RocketReachCreditBalance | undefined {
     const usage = payload.credit_usage;
     if (Array.isArray(usage)) {
       const row = usage.find((entry) => (entry as Json)?.credit_type === 'standard_lookup') as
-        | Json
-        | undefined;
+        Json | undefined;
       if (row) {
-        if (row.remaining === 'inf') return Infinity;
+        if (row.remaining === 'inf' || row.allocated === 'inf') {
+          return ROCKETREACH_UNLIMITED_CREDITS;
+        }
         const remaining = asNumber(row.remaining);
         if (remaining != null) return remaining;
+        // Some tiers report the allowance and the spend but no `remaining`.
+        const allocated = asNumber(row.allocated);
+        const used = asNumber(row.used);
+        if (allocated != null && used != null) return Math.max(0, allocated - used);
       }
     }
     return (
@@ -178,12 +191,10 @@ export function createRocketReachClient(options: RocketReachClientOptions): Rock
   async function getAccountStatus(): Promise<RocketReachAccountStatus> {
     const payload = await request('/api/account', { method: 'GET' });
     return {
-      // Free/unsubscribed accounts carry no plan name, only an account `state`
-      // (e.g. `registered`) — surface that rather than reporting nothing.
-      plan:
-        asString(payload.plan) ??
-        asString((payload.subscription as Json)?.plan_name) ??
-        asString(payload.state),
+      plan: asString(payload.plan) ?? asString((payload.subscription as Json)?.plan_name),
+      // Free/unsubscribed accounts carry no plan name, only a lifecycle `state`
+      // (e.g. `registered`). Reported separately so nobody reads it as a tier.
+      state: asString(payload.state),
       lookupCreditBalance: readLookupCredits(payload),
       accountName: asString(payload.name) ?? asString(payload.email),
     };

@@ -39,7 +39,10 @@ export function registerRocketReachTools(register: Register, apiRequest: ApiRequ
     'RocketReach: report account status, remaining paid lookup credits, and ' +
       'whether the key connects. Read-only — spends no credits. Fails closed ' +
       'with a clear message if the integration is disabled or no API key is set. ' +
-      'Call this before a lookup to check the credit budget.',
+      'Call this before a lookup to check the credit budget. ' +
+      '`account.lookupCreditBalance` is either a number of remaining lookups or ' +
+      'the string "unlimited" for an uncapped plan; it is absent when the ' +
+      'provider does not report a balance (treat that as unknown, not zero).',
     {},
     wrap(async () =>
       apiRequest('/api/integrations/rocketreach/test', { method: 'POST', actor: true }),

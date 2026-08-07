@@ -183,11 +183,31 @@ export interface RocketReachContact extends RocketReachCandidate {
   status?: string;
 }
 
+/**
+ * A remaining-credit figure: a count, or `'unlimited'` for an uncapped
+ * allowance. Deliberately *not* `Infinity` — this value crosses two boundaries
+ * that cannot carry it. `JSON.stringify(Infinity)` is `null`, which every
+ * consumer reads as "unknown" (the opposite of "uncapped"), and YAML 1.1 spells
+ * infinity `.inf`, so `Infinity` in frontmatter round-trips as the string
+ * `"Infinity"`. The literal survives both intact and is self-describing.
+ */
+export type RocketReachCreditBalance = number | 'unlimited';
+
+/** The uncapped-allowance sentinel, so callers don't hand-write the literal. */
+export const ROCKETREACH_UNLIMITED_CREDITS = 'unlimited' as const;
+
 /** Account/credit snapshot from RocketReach, used for the connection test + budgeting. */
 export interface RocketReachAccountStatus {
+  /** Subscription tier name, when the account has one. */
   plan?: string;
-  /** Remaining paid lookup credits. */
-  lookupCreditBalance?: number;
+  /**
+   * Account lifecycle state (e.g. `registered`). Distinct from {@link plan} —
+   * an unsubscribed account reports a state and no plan, and conflating the two
+   * teaches agents that `registered` is a subscription tier.
+   */
+  state?: string;
+  /** Remaining paid lookup credits; `'unlimited'` when the tier is uncapped. */
+  lookupCreditBalance?: RocketReachCreditBalance;
   /** Name/email on the account, when the provider returns it. */
   accountName?: string;
 }
@@ -200,8 +220,8 @@ export interface RocketReachRunRecord {
   /** The raw intake answers, as given by the user. */
   intake?: Record<string, unknown>;
   criteria: RocketReachSearchCriteria;
-  creditsBefore?: number;
-  creditsAfter?: number;
+  creditsBefore?: RocketReachCreditBalance;
+  creditsAfter?: RocketReachCreditBalance;
   candidates: RocketReachCandidate[];
   /** Candidates that were enriched (paid). */
   enriched: RocketReachContact[];
@@ -275,6 +295,11 @@ export function buildRunRecordNote(record: RocketReachRunRecord): {
   const yamlList = (items?: string[]): string =>
     items && items.length ? `[${items.map((v) => JSON.stringify(v)).join(', ')}]` : '[]';
 
+  // A count stays a bare YAML number; `'unlimited'` is quoted so it round-trips
+  // as a string rather than being read as a malformed number.
+  const yamlCredits = (value: RocketReachCreditBalance): string =>
+    typeof value === 'number' ? String(value) : JSON.stringify(value);
+
   const frontmatter = [
     '---',
     'type: prospect-run',
@@ -286,8 +311,10 @@ export function buildRunRecordNote(record: RocketReachRunRecord): {
     `regions: ${yamlList(record.criteria.regions)}`,
     `companies: ${yamlList(record.criteria.companies)}`,
     `requireWorkEmail: ${Boolean(record.criteria.requireWorkEmail)}`,
-    ...(record.creditsBefore != null ? [`creditsBefore: ${record.creditsBefore}`] : []),
-    ...(record.creditsAfter != null ? [`creditsAfter: ${record.creditsAfter}`] : []),
+    ...(record.creditsBefore != null
+      ? [`creditsBefore: ${yamlCredits(record.creditsBefore)}`]
+      : []),
+    ...(record.creditsAfter != null ? [`creditsAfter: ${yamlCredits(record.creditsAfter)}`] : []),
     `candidateCount: ${record.candidates.length}`,
     `enrichedCount: ${record.enriched.length}`,
     '---',

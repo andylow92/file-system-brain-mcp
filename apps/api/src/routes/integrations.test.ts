@@ -14,6 +14,16 @@ interface ApiResponse<T> {
 const API_KEY = 'rr_secret_KEY_1234567890';
 
 /**
+ * The account block as it appears *after* JSON serialization — credits are a
+ * count or the `'unlimited'` literal, never a non-representable number.
+ */
+interface AccountBody {
+  plan?: string;
+  state?: string;
+  lookupCreditBalance?: number | 'unlimited';
+}
+
+/**
  * A fake `fetch` standing in for the RocketReach API. Each test can swap the
  * behavior via `currentFetch`. The default throws, so any code path that
  * unexpectedly reaches the network fails loudly (this is how the "fail closed
@@ -184,15 +194,46 @@ describe('RocketReach integration routes', () => {
           { credit_type: 'person_export', allocated: 'inf', used: 0, remaining: 'inf' },
         ],
       });
-    const res = await api<{ account: { lookupCreditBalance: number; plan: string } }>(
-      'POST',
-      '/api/integrations/rocketreach/test',
-    );
+    const res = await api<{ account: AccountBody }>('POST', '/api/integrations/rocketreach/test');
     expect(res.status).toBe(200);
     // 3 from standard_lookup — not company_export's 5, and not undefined.
     expect(res.body.data).toMatchObject({
-      account: { lookupCreditBalance: 3, plan: 'registered' },
+      // An account `state` is not a subscription tier, so it lands on `state`.
+      account: { lookupCreditBalance: 3, state: 'registered' },
     });
+    expect(res.body.data?.account.plan).toBeUndefined();
+  });
+
+  // Regression: an uncapped allowance arrives as the string `"inf"`. Mapping it
+  // to `Infinity` reads correctly in-process but serializes to `null`, i.e.
+  // "unknown" — so this asserts the *wire* value the agent and the UI see.
+  it('reports an uncapped standard_lookup allowance as "unlimited" over the wire', async () => {
+    await enableWithKey();
+    currentFetch = async () =>
+      jsonResponse(200, {
+        email: 'someone@example.com',
+        credit_usage: [
+          { credit_type: 'standard_lookup', allocated: 'inf', used: 12, remaining: 'inf' },
+          { credit_type: 'company_export', allocated: 5, used: 0, remaining: 5 },
+        ],
+      });
+    const res = await api<{ account: AccountBody }>('POST', '/api/integrations/rocketreach/test');
+    expect(res.status).toBe(200);
+    expect(res.body.data?.account.lookupCreditBalance).toBe('unlimited');
+  });
+
+  // Some tiers report the allowance and the spend but no `remaining`; falling
+  // through to the flat fields there yields no budget at all.
+  it('derives the balance from allocated - used when remaining is absent', async () => {
+    await enableWithKey();
+    currentFetch = async () =>
+      jsonResponse(200, {
+        email: 'someone@example.com',
+        credit_usage: [{ credit_type: 'standard_lookup', allocated: 10, used: 4 }],
+      });
+    const res = await api<{ account: AccountBody }>('POST', '/api/integrations/rocketreach/test');
+    expect(res.status).toBe(200);
+    expect(res.body.data?.account.lookupCreditBalance).toBe(6);
   });
 
   it('surfaces an invalid key as 401 without leaking the key', async () => {
