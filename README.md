@@ -252,11 +252,15 @@ An **opt-in** integration that lets connected agents run structured, auditable
 prospect research. It is **disabled by default** — vaults that do no prospect
 research never see the tools or get asked to configure anything.
 
-- **Enable it** from the web UI: the ⚙ **Integrations** button in the top bar →
-  toggle RocketReach on, paste your [RocketReach API key](https://rocketreach.co/api),
-  and **Test connection**. The key is stored only in
-  `<vault>/.fsbrain/integrations.json` (owner-only, never in a note, never
-  committed) and is never shown again once saved.
+- **Enable it** from the web UI: the ⚙ **Settings** button in the top bar →
+  **Integrations** → toggle RocketReach on, paste your
+  [RocketReach API key](https://rocketreach.co/api), and **Test connection**. The
+  key is stored only in `<vault>/.fsbrain/integrations.json` (owner-only, never in
+  a note, never committed) and is never shown again once saved.
+- **Then restart the MCP server** (`npm run start:agent`) and reconnect your
+  agent. The server decides which tools to register at startup, so the
+  `rocketreach_*` tools do not appear in an already-running session. Turning the
+  integration _off_ needs no restart — calls fail closed immediately.
 - **Agent tools** (exposed only while enabled): `rocketreach_get_account_status`,
   `rocketreach_start_intake` (standardized intake questions to ask before
   spending credits), `rocketreach_search_contacts` (search-only — no paid

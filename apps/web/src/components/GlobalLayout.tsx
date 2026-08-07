@@ -10,7 +10,7 @@ import {
 import type { FileNode } from '@repo/shared';
 import type { LiveStatus } from '../hooks/useVaultEvents';
 import { ModalDialog } from './ModalDialog';
-import { RocketReachSettingsDialog } from './RocketReachSettingsDialog';
+import { SettingsDialog } from './SettingsDialog';
 
 const ROOT_DROP_KEY = '__root__';
 
@@ -115,6 +115,20 @@ function IconRename() {
         stroke="currentColor"
         strokeWidth="1.3"
         strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function IconGear() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path
+        d="M8 5.2A2.8 2.8 0 1 0 8 10.8 2.8 2.8 0 0 0 8 5.2Zm6.2 3.6-1.3-.7a5 5 0 0 0 0-.2l1.3-.7a.5.5 0 0 0 .2-.6l-.9-1.6a.5.5 0 0 0-.6-.2l-1.4.5a5 5 0 0 0-.2-.1l-.2-1.5a.5.5 0 0 0-.5-.4H8.9a.5.5 0 0 0-.5.4l-.2 1.5a5 5 0 0 0-.2.1l-1.4-.5a.5.5 0 0 0-.6.2l-.9 1.6a.5.5 0 0 0 .2.6l1.3.7a5 5 0 0 0 0 .2l-1.3.7a.5.5 0 0 0-.2.6l.9 1.6a.5.5 0 0 0 .6.2l1.4-.5a5 5 0 0 0 .2.1l.2 1.5a.5.5 0 0 0 .5.4h1.8a.5.5 0 0 0 .5-.4l.2-1.5a5 5 0 0 0 .2-.1l1.4.5a.5.5 0 0 0 .6-.2l.9-1.6a.5.5 0 0 0-.2-.6Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.1"
+        strokeLinejoin="round"
       />
     </svg>
   );
@@ -249,7 +263,7 @@ export function GlobalLayout({
   );
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [pendingDeletePath, setPendingDeletePath] = useState<string | null>(null);
-  const [showIntegrations, setShowIntegrations] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const draggedPathRef = useRef<string | null>(null);
   const mobileSidebarTriggerRef = useRef<HTMLButtonElement | null>(null);
 
@@ -874,22 +888,20 @@ export function GlobalLayout({
           <span className={isDirty ? 'topbar-status is-dirty' : 'topbar-status'}>
             {isDirty ? 'Unsaved' : 'Saved'}
           </span>
+          {/* Labeled on purpose: this is the only human entry point to the
+              integrations config, and as a bare 16px muted glyph it read as
+              decoration and was missed entirely. */}
           <button
             type="button"
-            className="icon-btn topbar-settings"
-            onClick={() => setShowIntegrations(true)}
-            title="Integrations"
-            aria-label="Integrations settings"
+            className="topbar-settings"
+            onClick={() => setShowSettings(true)}
+            title="Settings — integrations, AI formatting"
+            aria-label="Settings"
+            aria-haspopup="dialog"
+            aria-expanded={showSettings}
           >
-            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-              <path
-                d="M8 5.2A2.8 2.8 0 1 0 8 10.8 2.8 2.8 0 0 0 8 5.2Zm6.2 3.6-1.3-.7a5 5 0 0 0 0-.2l1.3-.7a.5.5 0 0 0 .2-.6l-.9-1.6a.5.5 0 0 0-.6-.2l-1.4.5a5 5 0 0 0-.2-.1l-.2-1.5a.5.5 0 0 0-.5-.4H8.9a.5.5 0 0 0-.5.4l-.2 1.5a5 5 0 0 0-.2.1l-1.4-.5a.5.5 0 0 0-.6.2l-.9 1.6a.5.5 0 0 0 .2.6l1.3.7a5 5 0 0 0 0 .2l-1.3.7a.5.5 0 0 0-.2.6l.9 1.6a.5.5 0 0 0 .6.2l1.4-.5a5 5 0 0 0 .2.1l.2 1.5a.5.5 0 0 0 .5.4h1.8a.5.5 0 0 0 .5-.4l.2-1.5a5 5 0 0 0 .2-.1l1.4.5a.5.5 0 0 0 .6-.2l.9-1.6a.5.5 0 0 0-.2-.6Z"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.1"
-                strokeLinejoin="round"
-              />
-            </svg>
+            <IconGear />
+            <span className="topbar-settings__label">Settings</span>
           </button>
           <button
             type="button"
@@ -906,10 +918,7 @@ export function GlobalLayout({
         </div>
       </header>
 
-      <RocketReachSettingsDialog
-        open={showIntegrations}
-        onClose={() => setShowIntegrations(false)}
-      />
+      <SettingsDialog open={showSettings} onClose={() => setShowSettings(false)} />
 
       <div className={sidebarCollapsed ? 'layout layout--sidebar-collapsed' : 'layout'}>
         <aside

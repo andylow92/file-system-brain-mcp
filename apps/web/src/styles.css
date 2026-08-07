@@ -355,6 +355,40 @@ body {
   transform: scale(1.12);
 }
 
+/* The settings entry point. Deliberately *not* .icon-btn: this is the only way
+   into the integrations config, and quiet chrome (16px glyph, muted on
+   transparent, label only on hover) made it invisible in practice. */
+.topbar-settings {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--type-label);
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background-color var(--motion-feedback-fast) var(--ease-standard),
+    border-color var(--motion-feedback-fast) var(--ease-standard);
+}
+
+.topbar-settings:hover {
+  background: var(--color-surface-hover);
+  border-color: var(--color-border-strong);
+}
+
+.topbar-settings svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
 .topbar-save {
   display: inline-flex;
   align-items: center;
@@ -679,6 +713,8 @@ body {
 .tab:focus-visible,
 .tree-item-row:focus-visible,
 .icon-btn:focus-visible,
+.topbar-settings:focus-visible,
+.settings-tab:focus-visible,
 .action-btn:focus-visible,
 .toolbar-btn:focus-visible,
 input:focus-visible,
@@ -1953,20 +1989,83 @@ select:focus-visible {
   }
 }
 
-.openrouter-settings,
-.rocketreach-settings {
-  width: min(100%, 480px);
+.settings-dialog {
+  width: min(100%, 560px);
+  max-height: min(88vh, 760px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
 }
 
-.settings-toggle {
-  flex-direction: row;
-  align-items: center;
-  gap: var(--space-2);
+.settings-tabs {
+  display: flex;
+  gap: var(--space-1);
+  border-bottom: 1px solid var(--color-border);
   margin-top: var(--space-3);
 }
 
-.settings-toggle input {
-  width: auto;
+.settings-tab {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--color-text-muted);
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: -1px;
+  font: inherit;
+  font-size: var(--type-label);
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    color var(--motion-feedback-fast) var(--ease-standard),
+    border-color var(--motion-feedback-fast) var(--ease-standard);
+}
+
+.settings-tab:hover {
+  color: var(--color-text);
+}
+
+.settings-tab.is-selected {
+  color: var(--color-text);
+  border-bottom-color: var(--color-accent);
+}
+
+.settings-dialog__body {
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.settings-panel__title {
+  margin: 0;
+  font-size: var(--type-label);
+  font-weight: 600;
+}
+
+.settings-panel__intro {
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-muted);
+}
+
+/* A "you are not done yet" note, not a warning — the config landed, but the
+   MCP server has to restart before it means anything. */
+.settings-callout {
+  margin: var(--space-3) 0 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-accent);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-raised);
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+  line-height: 1.5;
+}
+
+.settings-callout code {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  background: var(--color-surface);
+  padding: 0.05em 0.3em;
+  border-radius: 3px;
+  border: 1px solid var(--color-border);
 }
 
 .settings-ok {
@@ -2006,6 +2105,21 @@ select:focus-visible {
   padding: 0.5rem 0.65rem;
   font-family: var(--font-mono);
   font-size: var(--type-label);
+}
+
+/* A checkbox row, not a stacked field. Must come *after* `.settings-field` —
+   same specificity, so source order decides, and when these rules sat above it
+   the column direction and 100% width won: the enable toggle rendered as a
+   full-width box centered above its label. */
+.settings-toggle {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.settings-toggle input {
+  width: auto;
 }
 
 .settings-key-row {
@@ -2860,6 +2974,7 @@ select:focus-visible {
   .icon-btn,
   .toolbar-btn,
   .tab,
+  .topbar-settings,
   .save-button {
     min-width: 44px;
     min-height: 44px;
@@ -2944,6 +3059,21 @@ select:focus-visible {
 
   .topbar {
     grid-template-columns: minmax(0, auto) 1fr auto;
+  }
+}
+
+/* Only at genuinely tiny widths, where keeping the label would push the primary
+   Save action off-screen, does the label collapse. The button keeps its border
+   and full text contrast so it still reads as a control, and its accessible
+   name comes from aria-label rather than the hidden span. */
+@media (max-width: 480px) {
+  .topbar-settings__label {
+    display: none;
+  }
+
+  .topbar-settings {
+    padding: 0.35rem;
+    justify-content: center;
   }
 }
 
