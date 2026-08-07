@@ -11,6 +11,7 @@ import {
   type IntegrationState,
   type RocketReachCandidate,
   type RocketReachContact,
+  type RocketReachCreditBalance,
   type RocketReachRunRecord,
   type RocketReachSearchCriteria,
   type RocketReachStatus,
@@ -325,14 +326,16 @@ export async function handleIntegrationRoutes(
         .slice(maxLookups)
         .map((id) => ({ id, reason: 'over_lookup_limit' as const }));
 
-      let creditsBefore: number | undefined;
+      // Carried through to the response and the run note verbatim — an uncapped
+      // plan reports `'unlimited'`, which must not be coerced to a number.
+      let creditsBefore: RocketReachCreditBalance | undefined;
       try {
         creditsBefore = (await resolved.client.getAccountStatus()).lookupCreditBalance;
       } catch {
         /* budgeting is advisory; a failed pre-check must not block the lookup */
       }
       const enriched = await resolved.client.lookup(toEnrich);
-      let creditsAfter: number | undefined;
+      let creditsAfter: RocketReachCreditBalance | undefined;
       try {
         creditsAfter = (await resolved.client.getAccountStatus()).lookupCreditBalance;
       } catch {

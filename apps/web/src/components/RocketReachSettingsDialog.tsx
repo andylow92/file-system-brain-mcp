@@ -157,10 +157,15 @@ export function RocketReachSettingsDialog({ open, onClose }: RocketReachSettings
     try {
       const result = await testRocketReach();
       const credits = result.account.lookupCreditBalance;
-      setMessage({
-        kind: 'ok',
-        text: `Connected${credits != null ? ` · ${credits} lookup credits remaining` : ''}.`,
-      });
+      // An uncapped tier reports `'unlimited'`, not a count — say so rather than
+      // rendering it as a quantity or falling through to "no figure at all".
+      const creditsLabel =
+        credits === 'unlimited'
+          ? ' · unlimited lookup credits'
+          : credits != null
+            ? ` · ${credits} lookup credits remaining`
+            : '';
+      setMessage({ kind: 'ok', text: `Connected${creditsLabel}.` });
     } catch (error: unknown) {
       setMessage({
         kind: 'error',

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildRunRecordNote,
   maskApiKey,
+  parseFrontmatter,
   redactSecrets,
   ROCKETREACH_INTAKE_QUESTIONS,
   slugifyRun,
@@ -93,6 +94,22 @@ describe('buildRunRecordNote', () => {
     expect(note.content).toContain('source: rocketreach');
     expect(note.content).toContain('Ada Lovelace');
     expect(note.content).toContain('candidateCount: 1');
+  });
+
+  it('writes credit deltas as valid YAML for both counts and unlimited plans', () => {
+    expect(buildRunRecordNote({ ...base, creditsBefore: 55, creditsAfter: 54 }).content).toContain(
+      'creditsBefore: 55',
+    );
+    // `Infinity` would emit a bare `Infinity`, which YAML reads back as a
+    // string, not a number — the quoted sentinel round-trips as itself.
+    const unlimited = buildRunRecordNote({
+      ...base,
+      creditsBefore: 'unlimited',
+      creditsAfter: 'unlimited',
+    });
+    expect(unlimited.content).toContain('creditsBefore: "unlimited"');
+    expect(unlimited.content).toContain('creditsAfter: "unlimited"');
+    expect(parseFrontmatter(unlimited.content).frontmatter.creditsBefore).toBe('unlimited');
   });
 
   it('lists enriched contacts with their emails when present', () => {
