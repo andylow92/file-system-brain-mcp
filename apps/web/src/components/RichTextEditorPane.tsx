@@ -4,11 +4,10 @@ import {
   DEFAULT_OPENROUTER_MODEL,
   loadOpenRouterApiKey,
   loadOpenRouterModel,
-  saveOpenRouterApiKey,
-  saveOpenRouterModel,
+  subscribeToOpenRouterSettings,
 } from '../openrouter/storage';
 import { FixFormatPreviewDialog } from './FixFormatPreviewDialog';
-import { OpenRouterSettingsDialog } from './OpenRouterSettingsDialog';
+import { SettingsDialog } from './SettingsDialog';
 
 interface RichTextEditorPaneProps {
   filePath: string | null;
@@ -64,6 +63,15 @@ export function RichTextEditorPane({
   useEffect(() => {
     setValue(markdown);
   }, [filePath, markdown]);
+
+  // The same settings are editable from the topbar Settings dialog, so listen
+  // for writes from anywhere rather than trusting our own snapshot.
+  useEffect(() => {
+    return subscribeToOpenRouterSettings((next) => {
+      setApiKey(next.apiKey);
+      setModel(next.model);
+    });
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -166,12 +174,9 @@ export function RichTextEditorPane({
     [commitChange],
   );
 
-  const handleSaveSettings = useCallback((next: { apiKey: string; model: string }) => {
-    const nextModel = next.model || DEFAULT_OPENROUTER_MODEL;
-    setApiKey(next.apiKey);
-    setModel(nextModel);
-    saveOpenRouterApiKey(next.apiKey);
-    saveOpenRouterModel(nextModel);
+  // The panel has already persisted and broadcast the new settings; all that is
+  // left is to dismiss the dialog the user opened from this toolbar.
+  const handleSaveSettings = useCallback(() => {
     setIsSettingsOpen(false);
     setFixError(null);
   }, []);
@@ -438,12 +443,11 @@ export function RichTextEditorPane({
         <p className="empty-state">This file is empty. Start writing to add content.</p>
       ) : null}
 
-      <OpenRouterSettingsDialog
+      <SettingsDialog
         open={isSettingsOpen}
-        initialApiKey={apiKey}
-        initialModel={model}
+        initialSection="openrouter"
         onClose={() => setIsSettingsOpen(false)}
-        onSave={handleSaveSettings}
+        onOpenRouterSaved={handleSaveSettings}
       />
 
       <FixFormatPreviewDialog
