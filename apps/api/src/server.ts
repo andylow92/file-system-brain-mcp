@@ -7,6 +7,7 @@ import { createEventBus } from './events/eventBus.js';
 import { handleEventStream } from './events/sse.js';
 import { createVaultWatcher } from './events/watcher.js';
 import { createVaultIndex } from './index/vaultIndex.js';
+import type { RocketReachClient, RocketReachClientOptions } from './integrations/rocketreach.js';
 import {
   handleFileRoutes,
   runFeedbackScan,
@@ -14,11 +15,10 @@ import {
   type PatchFileResponse,
 } from './routes/files.js';
 import { handleIntegrationRoutes } from './routes/integrations.js';
-import type { RocketReachClient, RocketReachClientOptions } from './integrations/rocketreach.js';
 import { createAuditLog } from './storage/auditLog.js';
-import { createIntegrationStore } from './storage/integrationStore.js';
 import { createFileRepository } from './storage/fileRepository.js';
 import { createIdempotencyCache } from './storage/idempotencyCache.js';
+import { createIntegrationStore } from './storage/integrationStore.js';
 import { createPathResolver } from './storage/pathResolver.js';
 import { createProposalStore } from './storage/proposalStore.js';
 import { createQuestionLog } from './storage/questionLog.js';

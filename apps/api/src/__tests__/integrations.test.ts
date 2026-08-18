@@ -41,6 +41,13 @@ describe('maskApiKey', () => {
     expect(maskApiKey(undefined)).toBeUndefined();
     expect(maskApiKey('   ')).toBeUndefined();
   });
+
+  it('fully masks short keys instead of revealing most of their characters', () => {
+    // A 4+4 hint on a 9-char key would reveal 8 of 9 characters.
+    expect(maskApiKey('123456789')).toBe('•'.repeat(9));
+    expect(maskApiKey('12345678901')).toBe('•'.repeat(11));
+    expect(maskApiKey('123456789012')).toBe('1234…9012');
+  });
 });
 
 describe('ROCKETREACH_INTAKE_QUESTIONS', () => {
@@ -104,5 +111,48 @@ describe('buildRunRecordNote', () => {
     });
     expect(note.content).toContain('## Enriched contacts');
     expect(note.content).toContain('ada@ae.com');
+  });
+
+  it('escapes provider-controlled table cells so they cannot break or spoof the note', () => {
+    const note = buildRunRecordNote({
+      ...base,
+      candidates: [
+        {
+          id: 'p1',
+          name: 'Eve | Mallory\nInjected row',
+          title: 'CTO | CEO',
+          company: 'Pipes & Newlines Inc',
+          location: 'Nowhere',
+        },
+      ],
+    });
+    // Pipes are escaped and newlines collapsed — one row stays one row.
+    expect(note.content).toContain('| Eve \\| Mallory Injected row | CTO \\| CEO |');
+    expect(note.content).not.toContain('Eve | Mallory');
+  });
+
+  it('only links http(s) profile URLs and encodes link-breaking characters', () => {
+    const note = buildRunRecordNote({
+      ...base,
+      candidates: [
+        { id: 'p1', name: 'A', linkedinUrl: 'javascript:alert(1)' },
+        { id: 'p2', name: 'B', profileUrl: 'https://example.com/a(b) c' },
+      ],
+    });
+    expect(note.content).not.toContain('javascript:');
+    expect(note.content).toContain('[link](https://example.com/a%28b%29%20c)');
+  });
+
+  it('records skipped/failed ids so a partial run stays auditable', () => {
+    const note = buildRunRecordNote({
+      ...base,
+      skipped: [
+        { id: 'p7', reason: 'over_lookup_limit' },
+        { id: 'p8', reason: 'rate_limited' },
+      ],
+    });
+    expect(note.content).toContain('## Skipped / failed');
+    expect(note.content).toContain('- p7 — over_lookup_limit');
+    expect(note.content).toContain('- p8 — rate_limited');
   });
 });

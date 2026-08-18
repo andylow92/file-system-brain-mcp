@@ -255,18 +255,26 @@ research never see the tools or get asked to configure anything.
 - **Enable it** from the web UI: the ⚙ **Integrations** button in the top bar →
   toggle RocketReach on, paste your [RocketReach API key](https://rocketreach.co/api),
   and **Test connection**. The key is stored only in
-  `<vault>/.fsbrain/integrations.json` (owner-only, never in a note, never
-  committed) and is never shown again once saved.
+  `<vault>/.fsbrain/integrations.json` (owner-only file permissions, never in a
+  note) and is never shown again once saved. A catch-all `.fsbrain/.gitignore`
+  is seeded automatically so the key stays out of git even if you
+  version-control the vault.
 - **Agent tools** (exposed only while enabled): `rocketreach_get_account_status`,
   `rocketreach_start_intake` (standardized intake questions to ask before
   spending credits), `rocketreach_search_contacts` (search-only — no paid
   lookups), and `rocketreach_lookup_contacts` (paid enrichment, which **requires
-  an explicit `maxLookups` cap** and never exceeds it).
+  an explicit `maxLookups` cap**, never exceeds it, and is server-clamped to at
+  most 100 paid lookups per call). Tools are registered when the MCP server
+  starts — after enabling for the first time, restart the MCP server (your
+  agent session) so they appear; disabling needs no restart and takes effect
+  immediately.
 - **Safety:** every call **fails closed** if the integration is disabled or the
   key is missing — even if it was turned off after the MCP server started. API
   keys are redacted from all responses, errors, and logs. Runs can be saved into
   the vault as `prospects/…` notes with full provenance (actor, timestamp,
-  normalized parameters, credit deltas).
+  normalized parameters, credit deltas); a new run never overwrites an earlier
+  run's note, and if a lookup batch fails partway, the contacts already paid
+  for are still returned and recorded.
 
 ---
 

@@ -12,21 +12,10 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
+import { wrapToolHandler as wrap } from './toolEnvelope.js';
+
 type Register = McpServer['tool'];
 type ApiRequest = <T>(pathname: string, init?: RequestInit & { actor?: boolean }) => Promise<T>;
-
-/** Same result envelope + error handling as the core vault tools. */
-function wrap<Args>(handler: (args: Args) => Promise<unknown>) {
-  return async (args: Args) => {
-    try {
-      const result = await handler(args);
-      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      return { isError: true, content: [{ type: 'text' as const, text: `Error: ${message}` }] };
-    }
-  };
-}
 
 /**
  * Register the four RocketReach tools onto the MCP server. Call only when the
@@ -74,8 +63,10 @@ export function registerRocketReachTools(register: Register, apiRequest: ApiRequ
         .number()
         .optional()
         .describe('Cap on returned candidates (default 25, hard max 100).'),
-      requireWorkEmail: z.boolean().optional(),
-      dedupe: z.boolean().optional().describe('Skip people already present in the vault.'),
+      requireWorkEmail: z
+        .boolean()
+        .optional()
+        .describe('Drop candidates RocketReach marks as having no work email.'),
       save: z
         .enum(['fsbrain', 'none'])
         .optional()
@@ -95,16 +86,24 @@ export function registerRocketReachTools(register: Register, apiRequest: ApiRequ
     'rocketreach_lookup_contacts',
     'RocketReach: enrich selected candidates with emails/phones. This SPENDS ' +
       'paid lookup credits. You MUST pass an explicit positive `maxLookups` cap — ' +
-      'no more than that many candidates are ever enriched; the rest are reported ' +
-      'as skipped. Confirm the spend with the user first. Reports credit balance ' +
-      'before/after. Optionally saves the run as a provenance note.',
+      'no more than that many candidates are ever enriched (the server clamps it ' +
+      'to at most 100 per call); the rest are reported as skipped. Confirm the ' +
+      'spend with the user first. Reports credit balance before/after. If some ' +
+      'lookups fail mid-run, the already-enriched contacts are still returned ' +
+      '(and saved) with per-id failures listed. Optionally saves the run as a ' +
+      'provenance note.',
     {
       ids: z
         .array(z.string())
-        .describe('RocketReach profile ids from a prior rocketreach_search_contacts call.'),
+        .describe(
+          'RocketReach profile ids from a prior rocketreach_search_contacts call (max 500).',
+        ),
       maxLookups: z
         .number()
-        .describe('REQUIRED hard cap on paid lookups (integer ≥ 1). Never exceeded.'),
+        .describe(
+          'REQUIRED hard cap on paid lookups (integer ≥ 1; server-clamped to 100 per call). ' +
+            'Never exceeded.',
+        ),
       save: z.enum(['fsbrain', 'none']).optional(),
       project: z.string().optional(),
       audience: z.string().optional(),

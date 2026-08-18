@@ -208,6 +208,11 @@ export function RocketReachSettingsDialog({ open, onClose }: RocketReachSettings
           />
           <span className="settings-label">Enable RocketReach</span>
         </label>
+        <p className="settings-hint">
+          Agent (MCP) tools are registered at startup — after enabling, restart the MCP server (your
+          agent session) so the RocketReach tools appear. Disabling takes effect immediately: every
+          call re-checks this switch, no restart needed.
+        </p>
 
         <form className="settings-form" onSubmit={handleSaveKey}>
           <label className="settings-field">

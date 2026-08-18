@@ -113,7 +113,9 @@ export const ROCKETREACH_INTAKE_QUESTIONS: readonly IntakeQuestion[] = [
     prompt: 'How many paid RocketReach lookup credits may I spend at most?',
     kind: 'number',
     required: true,
-    help: 'A hard cap. Enrichment (emails/phones) will never exceed it. 0 means search-only.',
+    help:
+      'A hard cap. Enrichment (emails/phones) will never exceed it, and the ' +
+      `server clamps it to at most ${/* keep in sync with MAX_LOOKUPS_LIMIT */ 100} per run. 0 means search-only.`,
   },
   {
     id: 'requireWorkEmail',
@@ -140,6 +142,15 @@ export const ROCKETREACH_INTAKE_QUESTIONS: readonly IntakeQuestion[] = [
 export const DEFAULT_MAX_CANDIDATES = 25;
 /** Absolute ceiling on candidates regardless of what a caller asks for. */
 export const MAX_CANDIDATES_LIMIT = 100;
+/**
+ * Absolute per-request ceiling on **paid** lookups, regardless of the caller's
+ * `maxLookups`. Mirrors {@link MAX_CANDIDATES_LIMIT} on the free path: the
+ * caller-supplied cap bounds intent, this bounds blast radius — a runaway or
+ * hostile `maxLookups` can never drain the whole credit balance in one call.
+ */
+export const MAX_LOOKUPS_LIMIT = 100;
+/** Upper bound on how many candidate ids one lookup request may carry at all. */
+export const MAX_LOOKUP_IDS = 500;
 
 /** Normalized, provider-shaped search criteria (the output of the intake). */
 export interface RocketReachSearchCriteria {
@@ -152,9 +163,8 @@ export interface RocketReachSearchCriteria {
   keywords?: string[];
   /** Cap on returned candidates; clamped to {@link MAX_CANDIDATES_LIMIT}. */
   maxCandidates?: number;
+  /** Drop candidates the provider marks as having no work email. */
   requireWorkEmail?: boolean;
-  /** Skip candidates already present in the vault when true. */
-  dedupe?: boolean;
   /** Where to persist the run: a vault note, or nowhere. */
   save?: 'fsbrain' | 'none';
   /** Association label (project / company / sender identity) for provenance. */
@@ -205,7 +215,7 @@ export interface RocketReachRunRecord {
   candidates: RocketReachCandidate[];
   /** Candidates that were enriched (paid). */
   enriched: RocketReachContact[];
-  /** Candidates skipped (e.g. dedupe, missing work email). */
+  /** Candidates skipped or failed (e.g. over the lookup cap, a failed lookup). */
   skipped?: { id: string; reason: string }[];
   /** Association label carried from the criteria for grouping. */
   project?: string;
@@ -213,7 +223,9 @@ export interface RocketReachRunRecord {
 
 /**
  * Mask an API key for display: keep a few leading/trailing characters, hide the
- * middle. Returns `undefined` for empty input. Never returns the raw key.
+ * middle. The 4+4 hint only appears for keys long enough that most characters
+ * stay hidden; shorter keys are fully masked. Returns `undefined` for empty
+ * input. Never returns the raw key.
  */
 export function maskApiKey(key: string | undefined | null): string | undefined {
   if (!key) {
@@ -223,7 +235,7 @@ export function maskApiKey(key: string | undefined | null): string | undefined {
   if (!trimmed) {
     return undefined;
   }
-  if (trimmed.length <= 8) {
+  if (trimmed.length < 12) {
     return '•'.repeat(trimmed.length);
   }
   return `${trimmed.slice(0, 4)}…${trimmed.slice(-4)}`;
@@ -258,11 +270,40 @@ export function slugifyRun(label: string): string {
   return slug || 'run';
 }
 
+/** Collapse line breaks so provider text cannot break out of its markdown context. */
+function stripBreaks(text: string): string {
+  return text.replace(/\s*[\r\n]+\s*/g, ' ').trim();
+}
+
+/** Escape a provider-controlled value for a `|`-delimited markdown table cell. */
+function escapeCell(text: string | undefined): string {
+  return text ? stripBreaks(text).replace(/\|/g, '\\|') : '';
+}
+
+/**
+ * Only render http(s) URLs as links (a crafted `javascript:` or relative URL is
+ * dropped), with the characters that would terminate a markdown link encoded.
+ */
+function safeLinkUrl(url: string | undefined): string | undefined {
+  const trimmed = url?.trim();
+  if (!trimmed || !/^https?:\/\//i.test(trimmed)) {
+    return undefined;
+  }
+  return trimmed.replace(/[()\s]/g, (ch) =>
+    ch === '(' ? '%28' : ch === ')' ? '%29' : encodeURIComponent(ch),
+  );
+}
+
 /**
  * Build the markdown note (path + content) that records a research run in the
  * vault. Pure and deterministic — the caller supplies the timestamp — so the
  * exact note is easy to assert in tests. The note lives under `prospects/` with
  * frontmatter provenance (actor, timestamp, normalized params, credit deltas).
+ * Provider-controlled fields are escaped so a crafted name/title/URL cannot
+ * break or spoof the note.
+ *
+ * The returned path is a *base* path: the caller owns collision handling and
+ * must never overwrite an existing run (e.g. by adding a numeric suffix).
  */
 export function buildRunRecordNote(record: RocketReachRunRecord): {
   path: string;
@@ -298,9 +339,9 @@ export function buildRunRecordNote(record: RocketReachRunRecord): {
         '| Name | Title | Company | Location | Profile |',
         '| --- | --- | --- | --- | --- |',
         ...record.candidates.map((c) => {
-          const link = c.linkedinUrl || c.profileUrl;
+          const link = safeLinkUrl(c.linkedinUrl || c.profileUrl);
           const profile = link ? `[link](${link})` : '';
-          return `| ${c.name} | ${c.title ?? ''} | ${c.company ?? ''} | ${c.location ?? ''} | ${profile} |`;
+          return `| ${escapeCell(c.name)} | ${escapeCell(c.title)} | ${escapeCell(c.company)} | ${escapeCell(c.location)} | ${profile} |`;
         }),
       ].join('\n')
     : '_No candidates found._';
@@ -311,24 +352,34 @@ export function buildRunRecordNote(record: RocketReachRunRecord): {
         '## Enriched contacts',
         '',
         ...record.enriched.map((c) => {
-          const emails = c.emails?.length ? c.emails.join(', ') : '—';
-          return `- **${c.name}**${c.company ? ` · ${c.company}` : ''} — ${emails}`;
+          const emails = c.emails?.length ? c.emails.map(stripBreaks).join(', ') : '—';
+          return `- **${stripBreaks(c.name)}**${c.company ? ` · ${stripBreaks(c.company)}` : ''} — ${emails}`;
         }),
+      ].join('\n')
+    : '';
+
+  const skippedSection = record.skipped?.length
+    ? [
+        '',
+        '## Skipped / failed',
+        '',
+        ...record.skipped.map((s) => `- ${escapeCell(s.id)} — ${escapeCell(s.reason)}`),
       ].join('\n')
     : '';
 
   const body = [
     frontmatter,
     '',
-    `# Prospect research — ${labelSource}`,
+    `# Prospect research — ${stripBreaks(labelSource)}`,
     '',
-    `> Generated ${record.generatedAt} by \`${record.actor}\` via RocketReach.`,
-    record.criteria.audience ? `\n**Audience:** ${record.criteria.audience}` : '',
+    `> Generated ${record.generatedAt} by \`${stripBreaks(record.actor)}\` via RocketReach.`,
+    record.criteria.audience ? `\n**Audience:** ${stripBreaks(record.criteria.audience)}` : '',
     '',
     '## Candidates',
     '',
     candidateRows,
     enrichedSection,
+    skippedSection,
     '',
   ]
     .filter((line) => line !== undefined)
