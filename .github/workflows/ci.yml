@@ -22,6 +22,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          # Resolve the newest 22.x patch rather than the runner's cached one,
+          # so CI picks up Node security releases as soon as they ship.
+          check-latest: true
 
       # This repo deliberately does not track package-lock.json (see
       # .gitignore), so `npm ci` / setup-node's npm cache can't be used.

@@ -11,7 +11,8 @@ import { mkdir, writeFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-const REQUIRED_MAJOR = 20;
+// Node 20 is end-of-life (no security patches since 2026-04-30).
+const REQUIRED_MAJOR = 22;
 
 function reportOk(label, value) {
   process.stdout.write(`ok    ${label}: ${value}\n`);
