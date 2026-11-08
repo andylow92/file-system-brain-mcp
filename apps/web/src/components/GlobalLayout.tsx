@@ -888,14 +888,13 @@ export function GlobalLayout({
           <span className={isDirty ? 'topbar-status is-dirty' : 'topbar-status'}>
             {isDirty ? 'Unsaved' : 'Saved'}
           </span>
-          {/* Labeled on purpose: this is the only human entry point to the
-              integrations config, and as a bare 16px muted glyph it read as
-              decoration and was missed entirely. */}
+          {/* Labeled on purpose: a bare 16px muted glyph read as decoration and
+              was missed entirely. */}
           <button
             type="button"
             className="topbar-settings"
             onClick={() => setShowSettings(true)}
-            title="Settings — integrations, AI formatting"
+            title="Settings — AI formatting"
             aria-label="Settings"
             aria-haspopup="dialog"
             aria-expanded={showSettings}

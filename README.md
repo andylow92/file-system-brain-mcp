@@ -244,36 +244,6 @@ vault tools (`list_notes`, `read_note`, `create_note`, `patch_note`,
 
 ---
 
-## Optional integrations
-
-### RocketReach (prospect research)
-
-An **opt-in** integration that lets connected agents run structured, auditable
-prospect research. It is **disabled by default** — vaults that do no prospect
-research never see the tools or get asked to configure anything.
-
-- **Enable it** from the web UI: the ⚙ **Settings** button in the top bar →
-  **Integrations** → toggle RocketReach on, paste your
-  [RocketReach API key](https://rocketreach.co/api), and **Test connection**. The
-  key is stored only in `<vault>/.fsbrain/integrations.json` (owner-only, never in
-  a note, never committed) and is never shown again once saved.
-- **Then restart the MCP server** (`npm run start:agent`) and reconnect your
-  agent. The server decides which tools to register at startup, so the
-  `rocketreach_*` tools do not appear in an already-running session. Turning the
-  integration _off_ needs no restart — calls fail closed immediately.
-- **Agent tools** (exposed only while enabled): `rocketreach_get_account_status`,
-  `rocketreach_start_intake` (standardized intake questions to ask before
-  spending credits), `rocketreach_search_contacts` (search-only — no paid
-  lookups), and `rocketreach_lookup_contacts` (paid enrichment, which **requires
-  an explicit `maxLookups` cap** and never exceeds it).
-- **Safety:** every call **fails closed** if the integration is disabled or the
-  key is missing — even if it was turned off after the MCP server started. API
-  keys are redacted from all responses, errors, and logs. Runs can be saved into
-  the vault as `prospects/…` notes with full provenance (actor, timestamp,
-  normalized parameters, credit deltas).
-
----
-
 ## Environment variables
 
 For `apps/api`:

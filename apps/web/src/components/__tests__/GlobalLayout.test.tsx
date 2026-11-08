@@ -2,22 +2,10 @@ import { fireEvent, render, screen, waitFor, cleanup } from '@testing-library/re
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GlobalLayout } from '../GlobalLayout';
-import * as integrationsApi from '../../api/integrations';
-
-vi.mock('../../api/integrations', () => ({
-  getRocketReachStatus: vi.fn(),
-  updateRocketReach: vi.fn(),
-  testRocketReach: vi.fn(),
-}));
 
 describe('GlobalLayout', () => {
   beforeEach(() => {
     localStorage.clear();
-    vi.mocked(integrationsApi.getRocketReachStatus).mockResolvedValue({
-      enabled: false,
-      configured: false,
-      state: 'disabled',
-    });
   });
 
   afterEach(() => {
@@ -572,9 +560,7 @@ describe('GlobalLayout', () => {
   // -------------------------------------------------------------------------
   // Settings entry point
   //
-  // This is the only human path into the integrations config — the MCP-side
-  // RocketReach tools cannot be reached any other way (no env var, no CLI). It
-  // previously shipped as an unlabeled 16px glyph with no test behind it, so
+  // It previously shipped as an unlabeled 16px glyph with no test behind it, so
   // these assertions pin down both that it is *findable* and that it works.
   // -------------------------------------------------------------------------
 
@@ -589,7 +575,7 @@ describe('GlobalLayout', () => {
     expect(settingsBtn).toHaveAttribute('aria-expanded', 'false');
   });
 
-  it('opens the settings dialog on the Integrations section when activated', async () => {
+  it('opens the settings dialog when activated', async () => {
     renderLayout();
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -598,17 +584,11 @@ describe('GlobalLayout', () => {
 
     const dialog = await screen.findByRole('dialog', { name: 'Settings' });
     expect(dialog).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Integrations' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    );
-    expect(screen.getByRole('heading', { name: 'RocketReach' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'OpenRouter' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Settings' })).toHaveAttribute(
       'aria-expanded',
       'true',
     );
-
-    await waitFor(() => expect(integrationsApi.getRocketReachStatus).toHaveBeenCalled());
   });
 
   it('closes the settings dialog again', async () => {

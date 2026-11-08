@@ -445,7 +445,6 @@ export function RichTextEditorPane({
 
       <SettingsDialog
         open={isSettingsOpen}
-        initialSection="openrouter"
         onClose={() => setIsSettingsOpen(false)}
         onOpenRouterSaved={handleSaveSettings}
       />
