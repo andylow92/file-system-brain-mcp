@@ -2,7 +2,7 @@ import { promises as fsp } from 'node:fs';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import type { VaultEvent } from '@repo/shared';
+import { documentFormatForPath, type VaultEvent } from '@repo/shared';
 
 import type { EventBus } from './eventBus.js';
 
@@ -15,7 +15,9 @@ import type { EventBus } from './eventBus.js';
  * the API emitted within a short window.
  *
  * Conventions preserved: the hidden `.fsbrain/` dir (and any dotfile/dir) is
- * ignored, and only `.md` files emit events — matching what the tree surfaces.
+ * ignored, and only supported documents — `.md` notes and read-only `.html` /
+ * `.htm` documents (`documentFormatForPath`) — emit events, matching what the
+ * tree surfaces. Every other extension stays ignored.
  */
 export interface VaultWatcher {
   close(): void;
@@ -38,12 +40,12 @@ function isIgnoredRelativePath(relativePath: string): boolean {
   if (segments.some((segment) => segment.startsWith('.'))) {
     return true;
   }
-  // Only markdown files participate in the live layer.
-  return !relativePath.toLowerCase().endsWith('.md');
+  // Only supported documents (markdown + read-only HTML) participate in the live layer.
+  return documentFormatForPath(relativePath) === null;
 }
 
-/** Recursively collect the logical paths of every `.md` file under a root. */
-async function scanMarkdownPaths(root: string): Promise<Set<string>> {
+/** Recursively collect the logical paths of every supported document under a root. */
+async function scanDocumentPaths(root: string): Promise<Set<string>> {
   const found = new Set<string>();
 
   async function walk(dir: string, prefix: string): Promise<void> {
@@ -60,7 +62,7 @@ async function scanMarkdownPaths(root: string): Promise<Set<string>> {
       const relativePath = prefix ? `${prefix}/${entry.name}` : entry.name;
       if (entry.isDirectory()) {
         await walk(path.join(dir, entry.name), relativePath);
-      } else if (entry.isFile() && entry.name.toLowerCase().endsWith('.md')) {
+      } else if (entry.isFile() && documentFormatForPath(entry.name)) {
         found.add(relativePath);
       }
     }
@@ -80,7 +82,7 @@ export function createVaultWatcher(options: {
 
   // Logical paths the API recently reported, with the time it claimed them.
   const recentApiPaths = new Map<string, number>();
-  // Known `.md` paths, so we can distinguish created / updated / deleted.
+  // Known document paths, so we can distinguish created / updated / deleted.
   const knownPaths = new Set<string>();
   // Pending (debounced) paths awaiting a flush.
   const pending = new Set<string>();
@@ -144,7 +146,7 @@ export function createVaultWatcher(options: {
   // `flush` defers until this resolves so an edit landing in the startup window
   // isn't mislabeled `created`.
   let scanComplete = false;
-  void scanMarkdownPaths(contentRoot).then((paths) => {
+  void scanDocumentPaths(contentRoot).then((paths) => {
     // Merge rather than replace: API events may have arrived during the scan.
     for (const p of paths) {
       knownPaths.add(p);

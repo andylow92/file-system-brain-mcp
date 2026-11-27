@@ -1,7 +1,7 @@
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, unlink, writeFile } from 'node:fs/promises';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { VaultEvent } from '@repo/shared';
@@ -202,6 +202,46 @@ describe('live vault events (SSE + file watcher)', () => {
 
     const hidden = stream.seen().filter((e) => e.path.includes('.fsbrain'));
     expect(hidden).toHaveLength(0);
+
+    stream.close();
+  });
+
+  it('emits watch events for out-of-band html create / update / delete', async () => {
+    const stream = openEventStream(baseUrl);
+    await stream.ready;
+    const reportPath = path.join(contentRoot, 'report.html');
+
+    await writeFile(reportPath, '<h1>v1</h1>', 'utf8');
+    const created = await stream.waitFor((e) => e.source === 'watch' && e.path === 'report.html');
+    expect(created).toMatchObject({ type: 'created', actor: 'external' });
+
+    await writeFile(reportPath, '<h1>v2</h1>', 'utf8');
+    await stream.waitFor(
+      (e) => e.source === 'watch' && e.path === 'report.html' && e.type === 'updated',
+    );
+
+    await unlink(reportPath);
+    await stream.waitFor(
+      (e) => e.source === 'watch' && e.path === 'report.html' && e.type === 'deleted',
+    );
+
+    stream.close();
+  });
+
+  it('still ignores other extensions and hidden html', async () => {
+    const stream = openEventStream(baseUrl);
+    await stream.ready;
+
+    await writeFile(path.join(contentRoot, 'notes.txt'), 'plain', 'utf8');
+    await mkdir(path.join(contentRoot, '.hidden'), { recursive: true });
+    await writeFile(path.join(contentRoot, '.hidden', 'x.html'), '<p>hidden</p>', 'utf8');
+    await writeFile(path.join(contentRoot, '.dot.html'), '<p>dotfile</p>', 'utf8');
+    // Fence: once this arrives, the watcher has flushed the batch above.
+    await writeFile(path.join(contentRoot, 'fence.htm'), '<p>fence</p>', 'utf8');
+
+    await stream.waitFor((e) => e.source === 'watch' && e.path === 'fence.htm');
+
+    expect(stream.seen().filter((e) => e.path !== 'fence.htm')).toEqual([]);
 
     stream.close();
   });

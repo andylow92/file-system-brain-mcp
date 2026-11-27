@@ -12,6 +12,7 @@ import type {
   BlockAnchor,
   CategoryStat,
   ContextCandidate,
+  DocumentFormat,
   EditProposal,
   FeedbackFinding,
   FileNode,
@@ -46,6 +47,7 @@ import {
   findNoteId,
   findTextMatch,
   listSkills,
+  mimeTypeForFormat,
   DEFAULT_DUPLICATE_THRESHOLD,
   DEFAULT_SCHEMA_PACK,
   parseFrontmatter,
@@ -110,7 +112,14 @@ interface FileResponse {
   encoding: 'utf-8';
   lastModified: string;
   etag: string;
-  /** Stable note id from frontmatter `id:`, when present. */
+  /**
+   * Document format. Always `markdown` on write responses; `GET /api/file` may
+   * also return a read-only `html` document's source verbatim.
+   */
+  format: DocumentFormat;
+  /** MIME type for `format` (`text/markdown` / `text/html`). */
+  mimeType: string;
+  /** Stable note id from frontmatter `id:`, when present (markdown only). */
   id?: string;
 }
 
@@ -257,20 +266,24 @@ function toEtag(content: string, lastModified: string): string {
   return createHash('sha1').update(content).update(lastModified).digest('hex');
 }
 
-async function loadFileFromContext(
-  context: RequestContext,
+async function readDocumentFile(
+  absolutePath: string,
   logicalPath: string,
+  format: DocumentFormat,
 ): Promise<FileResponse> {
-  const absolutePath = context.pathResolver.resolveMarkdownPath(logicalPath);
   const stat = await fs.stat(absolutePath);
 
   if (!stat.isFile()) {
-    throw new StoragePathError('Markdown file does not exist');
+    throw new StoragePathError(
+      format === 'markdown' ? 'Markdown file does not exist' : 'HTML file does not exist',
+    );
   }
 
   const content = await fs.readFile(absolutePath, 'utf8');
   const lastModified = stat.mtime.toISOString();
-  const id = findNoteId(content);
+  // Note ids live in markdown frontmatter only; HTML is returned verbatim and
+  // never parsed for frontmatter, wikilinks, or tags.
+  const id = format === 'markdown' ? findNoteId(content) : undefined;
 
   return {
     path: logicalPath,
@@ -278,8 +291,35 @@ async function loadFileFromContext(
     encoding: 'utf-8',
     lastModified,
     etag: toEtag(content, lastModified),
+    format,
+    mimeType: mimeTypeForFormat(format),
     ...(id ? { id } : {}),
   };
+}
+
+/**
+ * Load a **markdown** note. Every caller except `GET /api/file` (block reads,
+ * PUT/PATCH/POST, proposal resolution) goes through here, so they all keep
+ * rejecting non-markdown paths — including read-only HTML — with a 400.
+ */
+async function loadFileFromContext(
+  context: RequestContext,
+  logicalPath: string,
+): Promise<FileResponse> {
+  const absolutePath = context.pathResolver.resolveMarkdownPath(logicalPath);
+  return readDocumentFile(absolutePath, logicalPath, 'markdown');
+}
+
+/**
+ * Load any readable document — a markdown note or a read-only HTML document —
+ * for `GET /api/file`. Same root confinement and hidden-path rules as markdown.
+ */
+async function loadDocumentFromContext(
+  context: RequestContext,
+  logicalPath: string,
+): Promise<FileResponse> {
+  const { absolutePath, format } = context.pathResolver.resolveDocumentPath(logicalPath);
+  return readDocumentFile(absolutePath, logicalPath, format);
 }
 
 /** Raised when two notes claim the same frontmatter `id:`. */
@@ -368,6 +408,7 @@ function toFileNode(node: TreeNode): FileNode {
     name: node.name,
     path: node.path,
     isDirectory: node.isDirectory,
+    ...(node.format ? { format: node.format } : {}),
     children: node.children?.map(toFileNode),
   };
 }
@@ -379,12 +420,17 @@ async function handleGetTree({ res, url, repository }: RequestContext): Promise<
   sendJson(res, 200, { success: true, data });
 }
 
+/**
+ * Markdown note paths only. The tree also lists read-only HTML documents, but
+ * backlinks and `?id=` lookups read every path as markdown — so HTML must never
+ * reach them.
+ */
 function flattenMarkdownPaths(nodes: TreeNode[]): string[] {
   const paths: string[] = [];
   for (const node of nodes) {
     if (node.isDirectory) {
       paths.push(...flattenMarkdownPaths(node.children ?? []));
-    } else {
+    } else if (node.format === 'markdown') {
       paths.push(node.path);
     }
   }
@@ -518,8 +564,9 @@ async function handleGetBlockAnchors(context: RequestContext): Promise<void> {
 
 async function handleGetFile(context: RequestContext): Promise<void> {
   const { res, url, repository } = context;
+  // `?id=` resolves through markdown notes only; `?path=` may name an HTML document.
   const logicalPath = await resolveLogicalPath(repository, url.searchParams);
-  const data = await loadFileFromContext(context, logicalPath);
+  const data = await loadDocumentFromContext(context, logicalPath);
   sendJson(res, 200, { success: true, data });
 }
 
@@ -664,6 +711,8 @@ async function handlePatchFile(context: RequestContext): Promise<void> {
       encoding: 'utf-8',
       lastModified: current.lastModified,
       etag: current.etag,
+      format: current.format,
+      mimeType: current.mimeType,
       ...(findNoteId(nextContent) ? { id: findNoteId(nextContent) as string } : {}),
       dryRun: true,
     };
