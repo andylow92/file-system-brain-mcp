@@ -32,14 +32,23 @@ primary action, links, live state). Serif prose keeps the editorial voice.
 - The 2026 "AI cream" light theme (warm beige wash).
 - SaaS dashboard chrome: card grids, hero metrics, gradient text, eyebrow
   labels on every panel.
-- Palette drift: any hue outside the graphite ramp, system-blue accent, and the
-  declared semantic set is a bug, not variety.
+- Palette drift: any hue outside the graphite ramp, system-blue accent, the
+  declared semantic set, and the declared viewer-tab accent set (Design
+  Principle 2) is a bug, not variety.
 
 ## Design Principles
 
 1. Prose first — typography carries the product; chrome recedes.
 2. One accent, spent deliberately — system blue marks primary actions, links, and
-   live state only; everything else is graphite and neutral.
+   live state only; everything else is graphite and neutral. The one declared
+   exception is the **viewer-tab accent set**: a restrained, application-owned hue
+   per viewer tab (`--color-tab-preview` / `-source` / `-split` / `-edit` /
+   `-activity` / `-review` / `-graph`; Preview reuses system blue, Activity the
+   success green), spent only on the active tab's indicator bar — never label
+   text, surfaces, or anything else — and always paired with non-colour cues (the
+   bar itself, a heavier label, `aria-selected`). Each holds ≥ 3:1 against the
+   tab bar in both themes. Document content can never set them: an HTML
+   document's own design stays inside its isolated preview.
 3. Elevation by light, not lines — layers separate via surface lightness;
    borders stay whisper-quiet.
 4. Every color comes from the token ramp — no ad-hoc hex values.
@@ -48,6 +57,7 @@ primary action, links, live state). Serif prose keeps the editorial voice.
 ## Accessibility & Inclusion
 
 WCAG AA: body and placeholder text ≥ 4.5:1, large text ≥ 3:1, against their
-actual background. Visible focus rings on every interactive element.
+actual background; non-text state indicators (the active-tab bar) ≥ 3:1. Colour
+is never the only cue. Visible focus rings on every interactive element.
 `prefers-reduced-motion` honored everywhere. Dark-first; the light theme is
 held to the same contrast standard.

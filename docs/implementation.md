@@ -5,7 +5,48 @@
 > Keep it accurate: update the status tables when you finish a unit of work.
 > Routed from [`AGENTS.md`](../AGENTS.md).
 
-_Last updated: 2026-07-07 (embeddings: persisted index + eval)_
+_Last updated: 2026-11-27 (read-only HTML documents + contextual tab accents, #112)_
+
+> **Latest change.** **Read-only HTML documents + contextual tab accents**
+> (#112). `.html` / `.htm` files now sit beside markdown as a **read-only
+> presentation format**. One extension→format map (`@repo/shared`
+> `documents.ts` — `documentFormatForPath`, `mimeTypeForFormat`) drives the API,
+> MCP, and web. **API:** `GET /api/tree` lists HTML with `FileNode.format`
+> (`markdown` | `html`); `GET /api/file` reads it verbatim through the new
+> `resolveDocumentPath` (same normalisation, root confinement, and hidden-path
+> rules as markdown) and every read now carries `format` + `mimeType` (HTML never
+> gets an `id`). All writes (`PUT`/`PATCH`/`POST /api/file`, `PATCH`/`DELETE
+/api/path` on a file, proposal approval) still reject HTML with `400`; folder
+> moves/deletes stay format-agnostic. Both `flattenMarkdownPaths` copies (routes +
+> `VaultIndex`) now keep markdown only, so HTML never reaches backlinks, `?id=`,
+> search/semantic/hybrid, context, `think`, graph, maintenance, skills, or
+> feedback. The watcher emits events for HTML too, so out-of-band edits refresh
+> the open preview. **MCP:** new `list_documents` (28th tool) returns
+> `{ documents: [{ path, format, mimeType }] }`; `list_notes` output is unchanged
+> (markdown only); `read_note` reads HTML verbatim. **Web:** HTML renders in an
+> `<iframe sandbox="" srcdoc>` (opaque origin; no scripts, forms, popups,
+> navigation) whose document starts with a no-network CSP; a light, pure
+> sanitiser (`apps/web/src/html/sandbox.ts` — `buildSandboxedSrcdoc`, also
+> recursing into `<template>` content) strips scripts/handlers/`<link>`/`<base>`/
+> `meta http-equiv`/`javascript:` URLs and retargets links so a click can't
+> navigate the frame. `HtmlPreviewPane` adds a read-only Source view and a
+> raw-source fallback; Split/Edit stay visible but `aria-disabled` with a
+> Read-only chip; the tree shows an HTML icon + badge and disables
+> rename/delete/drag; the top bar reads Read-only. **Tabs:** WAI-ARIA tabs with
+> manual activation (roving tabindex, arrows/Home/End, Enter/Space,
+> `tabpanel`), and each `data-tab` maps to an application-owned `--color-tab-*`
+> accent (both themes, ≥ 3:1 on the tab bar, pairwise distinct — enforced by
+> `tabAccents.test.ts`), spent only on the active indicator; declared in
+> `PRODUCT.md`. **Browser proof:** `npm run test:browser` (Playwright 1.63.0,
+> real Chromium; in CI after `npm test`) shows a previewed document can't run
+> scripts, reach app state/storage/cookies/APIs, submit forms, open popups,
+> navigate the app, or make any request — with and without the sanitiser — and
+> that styled reports keep their own design, swap cleanly, and never leak styles,
+> in light and dark. Tests: `apps/api` `__tests__/documents.test.ts`,
+> `routes/htmlDocuments.test.ts`, path-resolver/repository/watcher cases; `apps/mcp`
+> fresh-clone e2e; `apps/web` `sandbox.test.ts`, `HtmlPreviewPane.test.tsx`,
+> `FileViewerTabs.test.tsx`, `tabAccents.test.ts`, App/GlobalLayout cases, and
+> `browser/htmlSandbox.browser.test.ts`.
 
 > **Latest change.** **Embedding retrieval eval.** The embedding engine now has a
 > regression harness, closing the last open piece of #13. It runs in two layers.
@@ -395,8 +436,9 @@ real rendering) and _agent-brain_ (machine API, retrieval, provenance).
 ```
 apps/web (React + Vite)          apps/api (Node HTTP)             packages/shared
   GlobalLayout / FileTreeSidebar   /api/tree     list dir tree      FileNode, Api* contracts
-  FileViewerTabs (Prev|Edit|Split| /api/file     read/create/update markdown.ts (links/tags,
-    Activity|Review|Graph)         /api/file PATCH  granular edits    typed `rel:` aliases)
+  FileViewerTabs (Prev|Src|Split|  /api/file     read md + html,   markdown.ts (links/tags,
+    Edit|Activity|Review|Graph)    write md only; PATCH granular   typed `rel:` aliases)
+  HtmlPreviewPane + html/sandbox   (HTML: sandboxed srcdoc iframe)  documents.ts (md|html format)
   MarkdownPreviewPane (react-      /api/dir      create folder      patch.ts (append/prepend/
     markdown: GFM/math/highlight   /api/path     move / delete       replace_section/_block,
     + wikilinks + ^block-anchors)  /api/backlinks        link graph    ensure_id)
@@ -416,7 +458,7 @@ apps/web (React + Vite)          apps/api (Node HTTP)             packages/share
                                    index/ (VaultIndex: cached chunks+IDF,            (buildSemanticIndex,
                                            EventBus-invalidated, lazy rebuild)        queryRankedChunks)
 
-apps/mcp (MCP stdio server, 27 tools) — exposes the vault to agents: list/read/
+apps/mcp (MCP stdio server, 28 tools) — exposes the vault to agents: list/list_documents/read/
   create/update/patch/search/semantic_search/hybrid_search/get_context/think/
   backlinks/get_graph/schema_pack/recent_activity/move/delete plus read_block,
   get_block_anchors, propose_edit + list_proposals + run_maintenance +
@@ -453,7 +495,10 @@ Key facts an agent must know:
 | GitHub-style file tree + folders-first sort |   ✅   | `FileTreeSidebar`, `GlobalLayout`                                                                           |
 | Create / rename / move / delete (md + dirs) |   ✅   | `/api/file`, `/api/dir`, `/api/path`                                                                        |
 | Read / update with optimistic concurrency   |   ✅   | `etag` / `lastModified` in `handlePutFile`                                                                  |
-| Edit ↔ Preview tabs                         |   ✅   | `FileViewerTabs`; hard toggle (not live WYSIWYG)                                                            |
+| Edit ↔ Preview tabs                         |   ✅   | `FileViewerTabs`; hard toggle (not live WYSIWYG); WAI-ARIA tabs, manual activation                          |
+| Read-only HTML documents (`.html` / `.htm`) |   ✅   | `documents.ts`, `resolveDocumentPath`, `HtmlPreviewPane` + `html/sandbox.ts`; `list_documents` tool         |
+| Contextual tab accents (per-tab tokens)     |   ✅   | `--color-tab-*` in `styles.css` (both themes, ≥ 3:1), `data-tab`; guarded by `tabAccents.test.ts`           |
+| Browser-level HTML isolation tests          |   ✅   | `npm run test:browser` — Playwright 1.63.0 / real Chromium, `apps/web/browser/` (CI step)                   |
 | Path sandboxing inside `CONTENT_ROOT`       |   ✅   | `PathResolver`                                                                                              |
 | Sidebar filter by **filename**              |   ✅   | `filterQuery` — name/path only, not file contents                                                           |
 | "Fix Format" via OpenRouter                 |   ✅   | Client-side only (`openrouter/`)                                                                            |
@@ -477,7 +522,7 @@ Key facts an agent must know:
 | Block anchors (`^id`) + stable note ids     |   ✅   | `blocks.ts`, `noteId.ts`, `/api/block[-anchors]`                                                            |
 | Typed wikilinks (`[[T\|rel:supports]]`)     |   ✅   | `markdown.ts`, `Backlink.type`                                                                              |
 | Visual knowledge graph (Graph tab + API)    |   ✅   | `graph.ts`, `GET /api/graph`, `get_graph`, `GraphView`/`KnowledgeGraph`                                     |
-| **MCP server** (agent tools)                |   ✅   | `apps/mcp` (27 tools) — writes as `agent:mcp`                                                               |
+| **MCP server** (agent tools)                |   ✅   | `apps/mcp` (28 tools) — writes as `agent:mcp`                                                               |
 | Self-contained MCP launch (embedded API)    |   ✅   | `npm run start:agent` → bin `fsbrain-mcp`, see CONNECT.md                                                   |
 | Fresh-clone e2e MCP test (in `npm test`)    |   ✅   | `apps/mcp/src/__tests__/freshClone.test.ts`                                                                 |
 | Live layer (SSE + file watcher)             |   ✅   | `events/` EventBus + `fs.watch`, `GET /api/events`, `useVaultEvents`                                        |
@@ -508,14 +553,16 @@ Legend: ✅ done · 🚧 in progress · ⬜ not started
 | lists, h3–h6, links, code highlight, math)         |          |        |
 | Full-text **content** search + quick switcher      |    P1    |   ✅   |
 | Frontmatter / tags / properties                    |    P1    |   ✅   |
-| Non-markdown attachments (images, PDFs, canvas)    |    P2    |   ⬜   |
+| Non-markdown attachments (images, PDFs, canvas)    |    P2    |   ◑    |
 | Command palette, tabs/splits, outline, daily notes |    P2    |   ◑    |
 | Version history / trash / Git sync                 |    P2    |   ⬜   |
 | Plugin system, themes, mobile, multi-device sync   |    P3    |   ⬜   |
 
 The link graph now has both backlinks and a **visual force-directed graph view**
 (the Graph tab + `/api/graph`). ◑ = quick switcher + split done;
-palette/outline/daily-notes open. † renderer shipped and lazy-loaded, now
+palette/outline/daily-notes open. Attachments ◑ = self-contained **HTML
+documents** render read-only (#112); images/PDFs/canvas and a vault-scoped asset
+resolver for HTML's relative assets remain open. † renderer shipped and lazy-loaded, now
 including **Mermaid diagrams** (fenced ` ```mermaid ` blocks render as SVG).
 
 ### For agents (the brain)
@@ -870,6 +917,16 @@ into infrastructure we already have rather than adding a new subsystem.
     self-improvement loop from [`improvement-ideas.md`](improvement-ideas.md)
     (#3). Tests: `apps/api` `__tests__/questions.test.ts` (pure) +
     `routes/questions.test.ts` (endpoint).
+23. **Read-only HTML documents + contextual tab accents (#112).** ✅ **Done.**
+    `.html` / `.htm` join the tree and `GET /api/file` (`format` + `mimeType`)
+    as a read-only presentation format, kept out of every markdown pipeline;
+    the web renders them in an empty-sandbox `srcdoc` iframe behind a
+    no-network CSP, with a Source view; the MCP server gains `list_documents`
+    (28th tool). Viewer tabs gain per-tab accent tokens and full WAI-ARIA
+    keyboard support. Proven in real Chromium by `npm run test:browser`. Open
+    follow-ups: a vault-scoped asset resolver for relative assets (never raw
+    filesystem paths), non-UTF-8 charsets, and HTML editing — all out of scope
+    for v1.
 
 A broader brainstorm of follow-on **self-improvement loops** (skill notes,
 review-queue tuning, a question log, implicit relevance feedback, freshness
@@ -878,7 +935,7 @@ scoring) lives in [`improvement-ideas.md`](improvement-ideas.md) — skill notes
 (#5) have shipped; implicit relevance feedback (#4) remains.
 
 Deferred (not a priority for the local/agent focus): authn/z + per-agent scopes,
-non-markdown attachments, editor ergonomics (palette/outline/daily
+non-markdown attachments beyond read-only HTML, editor ergonomics (palette/outline/daily
 notes/WYSIWYG), version history/Git sync, plugins/themes/mobile/sync. Proposal
 follow-ups also deferred: settled-proposal retention/pruning, a computed
 line-level diff in the Review UI, and closing the no-`baseEtag` update TOCTOU.
@@ -897,7 +954,9 @@ planned roadmap. The optional items above deepen it further.
 - **Read [`AGENTS.md`](../AGENTS.md) first.** Follow the Operating Rules and
   Claude Code Rules there.
 - Keep changes **surgical**; match the file's existing style.
-- Preserve the **path-sandboxing** and **markdown-only** safety guarantees.
+- Preserve the **path-sandboxing** and **markdown-only write** safety guarantees:
+  HTML is read-only, never enters markdown-only processing, and renders only
+  inside the sandboxed preview (`apps/web/src/html/sandbox.ts`).
 - Add tests next to the code they cover (`*.test.ts(x)`); shared utils →
   `apps/api`.
 - Verify with project commands (§7). Do not invent commands.
@@ -914,6 +973,7 @@ npm run dev:web      # web   → http://localhost:5173
 npm run start:agent  # self-contained MCP server on stdio (fsbrain-mcp)
 npm run doctor       # preflight: Node version + vault writable
 npm test             # all workspace tests (vitest), incl. fresh-clone MCP e2e
+npm run test:browser # real-Chromium security tests for the sandboxed HTML preview
 npm run lint         # eslint
 npm run build        # tsc/vite/esbuild build across workspaces (produces the MCP bin)
 ```

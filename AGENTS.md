@@ -43,7 +43,8 @@ the in-process API. Pick the tool that matches your intent:
 | I want to…                                             | MCP tool            | HTTP endpoint                |
 | ------------------------------------------------------ | ------------------- | ---------------------------- |
 | List notes (optionally under a subtree)                | `list_notes`        | `GET /api/tree`              |
-| Read a note (by `path` **or** `id`)                    | `read_note`         | `GET /api/file`              |
+| List every document (markdown + read-only HTML)        | `list_documents`    | `GET /api/tree`              |
+| Read a note (by `path` **or** `id`) or an HTML doc     | `read_note`         | `GET /api/file`              |
 | Read one `^block` (+ surrounding context)              | `read_block`        | `GET /api/block`             |
 | List a note's `^block` anchors                         | `get_block_anchors` | `GET /api/block-anchors`     |
 | Create a note                                          | `create_note`       | `POST /api/file`             |
@@ -90,6 +91,27 @@ Done and on `main`-track (details + status tables in `docs/implementation.md`):
 - **Files & tree** — GitHub-style tree, CRUD for `.md` files and folders,
   optimistic-concurrency writes (`etag` / `lastModified`), `CONTENT_ROOT`
   sandboxing. Hidden dotfiles/dirs (e.g. `.fsbrain/`) are excluded from the tree.
+- **HTML documents (read-only)** — `.html` / `.htm` files are listed in the
+  tree (`FileNode.format: "html"`, a file-type badge in the UI) and read
+  verbatim by `GET /api/file` (`format` + `mimeType` on every read) or the
+  `list_documents` / `read_note` MCP tools. Markdown stays the knowledge format:
+  every write path rejects HTML (`400`), and HTML never enters frontmatter,
+  wikilinks, backlinks, the graph, search/RAG, maintenance, skills, or feedback
+  (both `flattenMarkdownPaths` filter by `format`). The single
+  extension→format map is `@repo/shared` `documents.ts`
+  (`documentFormatForPath`). The web UI renders HTML in an
+  `<iframe sandbox="" srcdoc>` behind a no-network CSP
+  (`apps/web/src/html/sandbox.ts`, `HtmlPreviewPane`) — opaque origin, no
+  scripts / forms / popups / navigation / network — with a read-only Source
+  tab; the watcher emits HTML events, so on-disk edits refresh the preview.
+  Real-Chromium proof: `npm run test:browser`. Don't loosen the sandbox or the
+  CSP, and keep internal tree consumers markdown-only.
+- **Contextual tab accents** — each viewer tab (`data-tab`) maps to an
+  application-owned `--color-tab-*` token (both themes, ≥ 3:1 on the tab bar,
+  guarded by `apps/web/src/__tests__/tabAccents.test.ts`), spent only on the
+  active tab's indicator. Tabs follow the WAI-ARIA pattern with manual
+  activation (roving tabindex, arrows / Home / End, Enter / Space). Declared in
+  `PRODUCT.md`.
 - **Links & metadata** — `[[wikilinks]]` (clickable, resolved), a backlinks
   panel (`GET /api/backlinks`), and frontmatter + `#tags` parsing. The pure
   helpers live in `@repo/shared` (`markdown.ts`).
@@ -163,8 +185,8 @@ Done and on `main`-track (details + status tables in `docs/implementation.md`):
   The pure builder lives in `@repo/shared` (`graph.ts`,
   `extractFrontmatterRelations`); the renderer (`apps/web` `KnowledgeGraph`) is
   lazy-loaded.
-- **MCP server** (`apps/mcp`) — a stdio server exposing 27 vault tools
-  (`list_notes`, `read_note`, `read_block`, `get_block_anchors`,
+- **MCP server** (`apps/mcp`) — a stdio server exposing 28 vault tools
+  (`list_notes`, `list_documents`, `read_note`, `read_block`, `get_block_anchors`,
   `create_note`, `update_note`, `patch_note`, `search_notes`,
   `semantic_search`, `hybrid_search`, `get_context`, `think`, `get_backlinks`,
   `get_graph`, `schema_pack`, `recent_activity`, `recent_questions`,
@@ -453,10 +475,12 @@ npm run dev:web    # run web UI (http://localhost:5173)
 npm run start:agent  # launch the self-contained MCP server (`fsbrain-mcp`, stdio)
 npm run doctor     # preflight: Node version + vault writable
 npm test           # run all workspace tests (vitest), incl. fresh-clone MCP e2e
+npm run test:browser  # real-Chromium security tests for the sandboxed HTML preview
 npm run lint       # eslint
 npm run build      # tsc/vite/esbuild build across workspaces (produces the MCP bin)
 npm run format     # prettier --check
 ```
 
-When you finish a change: run `npm test`, `npm run lint`, and `npm run build`,
-then update `docs/implementation.md` to reflect the new state.
+When you finish a change: run `npm test`, `npm run lint`, and `npm run build`
+(plus `npm run test:browser` if you touched HTML preview isolation), then
+update `docs/implementation.md` to reflect the new state.
