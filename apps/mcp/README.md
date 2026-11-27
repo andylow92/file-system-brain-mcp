@@ -14,8 +14,9 @@ feed and the audit log at `<CONTENT_ROOT>/.fsbrain/audit.jsonl`.
 
 | Tool                | Description                                                                              |
 | ------------------- | ---------------------------------------------------------------------------------------- |
-| `list_notes`        | List all note paths (optionally under a subtree).                                        |
-| `read_note`         | Read a note by path or stable id (returns content + etag + `id`).                        |
+| `list_notes`        | List all markdown note paths (optionally under a subtree).                               |
+| `list_documents`    | List every document with `format` + `mimeType` (markdown notes and read-only HTML).      |
+| `read_note`         | Read a document by path, or a note by id (content + etag + `format`/`mimeType` + `id`).  |
 | `read_block`        | Read a single `^block-id` block + surrounding context.                                   |
 | `get_block_anchors` | List every `^block-id` anchor in a note.                                                 |
 | `create_note`       | Create a new note.                                                                       |
@@ -45,6 +46,14 @@ feed and the audit log at `<CONTENT_ROOT>/.fsbrain/audit.jsonl`.
 `update_note` and `move_path` reject stale writes via the API's optimistic
 concurrency check. There is **no** `resolve` tool: edit-proposal resolution is
 human-only by design.
+
+**HTML documents (read-only).** `.html` / `.htm` files in the vault are listed
+by `list_documents` (`format: "html"`, `mimeType: "text/html"`) — `list_notes`
+stays markdown-only, so existing agents see no difference — and `read_note`
+returns their source verbatim with `format: "html"` (and no `id`). They are a
+presentation format: `create_note`, `update_note`, `patch_note`, `read_block`,
+`get_block_anchors`, `move_path`, and `delete_path` reject them, and they are
+not indexed for search, wikilinks, backlinks, or the graph.
 
 **Skill notes (procedural memory).** A note whose frontmatter declares
 `type: skill` (plus optional `name:` / `description:`) is a reusable playbook —
@@ -78,7 +87,7 @@ npm run start:agent        # from the repo root — runs `fsbrain-mcp` on stdio
 The server prints a one-line readiness banner on stderr:
 
 ```
-fsbrain-mcp ready · mode=embedded · vault=/home/me/.fsbrain/vault · tools=27 · actor=agent:mcp
+fsbrain-mcp ready · mode=embedded · vault=/home/me/.fsbrain/vault · tools=28 · actor=agent:mcp
 ```
 
 For active development with auto-reload:
@@ -119,10 +128,12 @@ Copy-paste config snippets for OpenClaw / Claude Desktop / Claude Code / Cursor:
 
 `src/__tests__/freshClone.test.ts` spawns the server as a real stdio child
 against a temp `CONTENT_ROOT` and drives it via the official MCP SDK client.
-It asserts `tools/list` returns all 27 expected names, round-trips
+It asserts `tools/list` returns all 28 expected names, round-trips
 `create_note` → `read_note` → `search_notes` → `semantic_search` →
 `hybrid_search` → `think` → `propose_edit` → `list_proposals` → `recent_activity`
 → `run_maintenance`, and confirms the write landed both on disk and in
-`.fsbrain/audit.jsonl`. A second test exercises
+`.fsbrain/audit.jsonl`. It also drops a `report.html` straight into the vault
+and checks that `list_documents` lists it as `html`, `list_notes` does not, and
+`read_note` returns its source verbatim. A second test exercises
 the bundled `dist/server.js` (skipped if `npm run build` hasn't been run).
 Runs in `npm test`.

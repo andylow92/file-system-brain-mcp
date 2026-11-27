@@ -104,6 +104,7 @@ describe('fresh-clone MCP end-to-end', () => {
         'get_context',
         'get_graph',
         'hybrid_search',
+        'list_documents',
         'list_notes',
         'list_proposals',
         'list_skills',
@@ -141,8 +142,9 @@ describe('fresh-clone MCP end-to-end', () => {
       name: 'read_note',
       arguments: { path: 'notes/idea.md' },
     })) as ContentResult;
-    const read = decode<{ content: string }>(readResult);
+    const read = decode<{ content: string; format: string; mimeType: string }>(readResult);
     expect(read.content).toContain('Key idea');
+    expect(read).toMatchObject({ format: 'markdown', mimeType: 'text/markdown' });
 
     // 3) The write must land on disk under the temp CONTENT_ROOT.
     const onDisk = await fs.readFile(path.join(vault, 'notes', 'idea.md'), 'utf8');
@@ -150,6 +152,50 @@ describe('fresh-clone MCP end-to-end', () => {
 
     // 3a) The empty-vault seed should have created welcome.md.
     await expect(fs.access(path.join(vault, 'welcome.md'))).resolves.toBeUndefined();
+
+    // 3b) A read-only HTML document dropped straight into the vault is listed by
+    // list_documents (with its format) but not by list_notes, and read_note
+    // returns its source verbatim with an explicit format.
+    const reportHtml =
+      '<!DOCTYPE html>\n<html><head><style>h1 { color: teal; }</style></head>\n' +
+      '<body><h1>Q3 report</h1><script>alert(1)</script></body></html>\n';
+    await fs.writeFile(path.join(vault, 'report.html'), reportHtml, 'utf8');
+
+    const documentsResult = (await client.callTool({
+      name: 'list_documents',
+      arguments: {},
+    })) as ContentResult;
+    const { documents } = decode<{
+      documents: Array<{ path: string; format: string; mimeType: string }>;
+    }>(documentsResult);
+    expect(documents).toContainEqual({
+      path: 'report.html',
+      format: 'html',
+      mimeType: 'text/html',
+    });
+    expect(documents).toContainEqual({
+      path: 'notes/idea.md',
+      format: 'markdown',
+      mimeType: 'text/markdown',
+    });
+
+    const notesResult = (await client.callTool({
+      name: 'list_notes',
+      arguments: {},
+    })) as ContentResult;
+    const { paths: notePaths } = decode<{ paths: string[] }>(notesResult);
+    expect(notePaths).toContain('notes/idea.md');
+    expect(notePaths).not.toContain('report.html');
+
+    const htmlReadResult = (await client.callTool({
+      name: 'read_note',
+      arguments: { path: 'report.html' },
+    })) as ContentResult;
+    const htmlRead = decode<{ content: string; format: string; mimeType: string; id?: string }>(
+      htmlReadResult,
+    );
+    expect(htmlRead).toMatchObject({ content: reportHtml, format: 'html', mimeType: 'text/html' });
+    expect(htmlRead.id).toBeUndefined();
 
     // 4) search_notes should find the new note.
     const searchResult = (await client.callTool({
@@ -296,7 +342,7 @@ describe('fresh-clone MCP end-to-end', () => {
     await client.connect(transport);
 
     const { tools } = await client.listTools();
-    expect(tools.length).toBe(27);
+    expect(tools.length).toBe(28);
     expect(tools.map((tool) => tool.name)).toContain('create_note');
     expect(tools.map((tool) => tool.name)).toContain('think');
     expect(tools.map((tool) => tool.name)).toContain('proposal_stats');

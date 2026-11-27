@@ -71,6 +71,7 @@ describe('mcp server (self-contained)', () => {
           'get_context',
           'get_graph',
           'hybrid_search',
+          'list_documents',
           'list_notes',
           'list_proposals',
           'list_skills',
