@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor, cleanup } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, cleanup, within } from '@testing-library/react';
+import type { FileNode } from '@repo/shared';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GlobalLayout } from '../GlobalLayout';
@@ -367,6 +368,129 @@ describe('GlobalLayout', () => {
 
     expect(screen.getByText(/could not find/i)).toBeInTheDocument();
     expect(onRenamePath).not.toHaveBeenCalled();
+  });
+
+  // -------------------------------------------------------------------------
+  // HTML documents (read-only presentation format)
+  // -------------------------------------------------------------------------
+
+  const htmlTree: FileNode[] = [
+    {
+      name: 'docs',
+      path: 'docs',
+      isDirectory: true,
+      children: [
+        { name: 'guide.md', path: 'docs/guide.md', isDirectory: false, format: 'markdown' },
+        { name: 'report.html', path: 'docs/report.html', isDirectory: false, format: 'html' },
+      ],
+    },
+    // No `format` (older API): derived from the extension.
+    { name: 'legacy.htm', path: 'legacy.htm', isDirectory: false },
+  ];
+
+  function renderHtmlLayout() {
+    const onRenamePath = vi.fn(async () => {});
+    const onDeletePath = vi.fn(async () => {});
+    const view = render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <GlobalLayout
+          tree={htmlTree}
+          onSelectFile={vi.fn()}
+          onCreateFile={vi.fn(async () => {})}
+          onCreateFolder={vi.fn(async () => {})}
+          onRenamePath={onRenamePath}
+          onDeletePath={onDeletePath}
+          onSave={vi.fn(async () => {})}
+        >
+          <div />
+        </GlobalLayout>
+      </MemoryRouter>,
+    );
+    return { ...view, onRenamePath, onDeletePath };
+  }
+
+  it('marks html documents with a distinct icon and a text badge', () => {
+    renderHtmlLayout();
+
+    for (const name of [/report\.html/, /legacy\.htm/]) {
+      const row = screen.getByRole('treeitem', { name });
+      expect(row).toHaveAttribute('data-format', 'html');
+      expect(within(row).getByText('HTML')).toHaveClass('tree-badge');
+      expect(row.querySelector('.tree-icon-html')).not.toBeNull();
+      expect(row.querySelector('.tree-icon-file')).toBeNull();
+    }
+
+    const markdownRow = screen.getByRole('treeitem', { name: 'guide.md' });
+    expect(markdownRow).not.toHaveAttribute('data-format');
+    expect(within(markdownRow).queryByText('HTML')).not.toBeInTheDocument();
+    expect(markdownRow.querySelector('.tree-icon-file')).not.toBeNull();
+  });
+
+  it('does not let html documents be dragged or moved', async () => {
+    const { onRenamePath } = renderHtmlLayout();
+
+    const htmlRow = screen.getByRole('treeitem', { name: /report\.html/ });
+    expect(htmlRow).toHaveAttribute('draggable', 'false');
+    expect(screen.queryByTitle('Drag report.html')).not.toBeInTheDocument();
+    expect(screen.getByRole('treeitem', { name: 'guide.md' })).toHaveAttribute('draggable', 'true');
+
+    const dt = new DataTransferStub();
+    fireEvent.dragStart(htmlRow, { dataTransfer: dt });
+    expect(dt.getData('text/plain')).toBe('');
+    expect(screen.queryByLabelText('Move to repository root')).not.toBeInTheDocument();
+
+    // Even a forged drop of the html path is refused.
+    fireEvent.drop(screen.getByRole('treeitem', { name: /legacy\.htm/ }), {
+      dataTransfer: { getData: () => 'docs/report.html' },
+    });
+    expect(
+      await screen.findByText('HTML documents are read-only and cannot be moved.'),
+    ).toBeInTheDocument();
+    expect(onRenamePath).not.toHaveBeenCalled();
+  });
+
+  it('disables rename and delete for a selected html document, and explains why', () => {
+    renderHtmlLayout();
+    const rename = () => screen.getByRole('button', { name: 'Rename' });
+    const remove = () => screen.getByRole('button', { name: 'Delete' });
+
+    fireEvent.click(screen.getByRole('treeitem', { name: /report\.html/ }));
+    expect(rename()).toBeDisabled();
+    expect(remove()).toBeDisabled();
+    expect(rename()).toHaveAttribute('title', 'Rename — HTML documents are read-only');
+    expect(remove()).toHaveAttribute('title', 'Delete — HTML documents are read-only');
+
+    // Markdown notes and folders keep their actions.
+    fireEvent.click(screen.getByRole('treeitem', { name: 'guide.md' }));
+    expect(rename()).toBeEnabled();
+    expect(remove()).toBeEnabled();
+    expect(rename()).toHaveAttribute('title', 'Rename');
+    fireEvent.click(screen.getByRole('treeitem', { name: 'docs' }));
+    expect(rename()).toBeEnabled();
+    expect(remove()).toBeEnabled();
+  });
+
+  it('shows the open html document as read-only in the top bar', () => {
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <GlobalLayout
+          tree={htmlTree}
+          selectedFilePath="docs/report.html"
+          onSelectFile={vi.fn()}
+          onCreateFile={vi.fn(async () => {})}
+          onCreateFolder={vi.fn(async () => {})}
+          onRenamePath={vi.fn(async () => {})}
+          onDeletePath={vi.fn(async () => {})}
+          onSave={vi.fn(async () => {})}
+        >
+          <div />
+        </GlobalLayout>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText('Read-only', { selector: '.topbar-status' })).toBeInTheDocument();
+    expect(screen.queryByText('Saved')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Save/ })).toBeDisabled();
   });
 
   // -------------------------------------------------------------------------

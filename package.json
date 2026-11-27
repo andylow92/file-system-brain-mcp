@@ -15,7 +15,8 @@
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --check .",
     "format:write": "prettier --write .",
-    "test": "npm run --workspaces --if-present test"
+    "test": "npm run --workspaces --if-present test",
+    "test:browser": "npm --workspace @repo/web run test:browser"
   },
   "devDependencies": {
     "eslint": "^8.57.0",

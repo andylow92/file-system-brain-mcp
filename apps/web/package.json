@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -p tsconfig.json && vite build",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:browser": "vitest run -c vitest.browser.config.ts"
   },
   "dependencies": {
     "@repo/shared": "0.0.1",
@@ -30,6 +31,7 @@
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^4.4.1",
     "jsdom": "^25.0.1",
+    "playwright": "1.63.0",
     "typescript": "^5.8.3",
     "vite": "^6.4.3"
   }
