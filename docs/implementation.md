@@ -5,7 +5,31 @@
 > Keep it accurate: update the status tables when you finish a unit of work.
 > Routed from [`AGENTS.md`](../AGENTS.md).
 
-_Last updated: 2026-11-27 (read-only HTML documents + contextual tab accents, #112)_
+_Last updated: 2026-11-27 (symlink confinement: every read and write stays inside the real vault root)_
+
+> **Latest change.** **Symlink confinement.** Path checks used to be lexical
+> only, and `fs.stat` / `readFile` / `writeFile` follow symlinks. So an
+> owner-created symlink in the vault (`notes/link.md -> /elsewhere/file`) let any
+> API or MCP caller read or overwrite a file outside the vault, including agents
+> through `read_note` / `update_note` / `patch_note`. Now every disk access also
+> resolves the path with `realpath` and judges it by where it really is.
+> `PathResolver.resolveRealPath` compares against the root's own real path,
+> resolved once, so a vault under a symlinked directory (macOS `/tmp`) still
+> works. The real location must pass the requested path's rules: inside the
+> vault, no hidden segment, and the same document format. Creates (new notes,
+> folders, and move destinations) go through `ensureCreatableInsideRoot`. It
+> checks the nearest existing ancestor and refuses a broken symlink, and new
+> files are opened with `O_EXCL`. This covers `GET /api/file` (markdown and
+> read-only HTML), block reads, the tree, `PUT`/`PATCH`/`POST`, moves, deletes,
+> proposal approval, the vault index, and the maintenance etag/mtime reads. A
+> violation is `400 invalid_path`. Symlinks that stay inside the vault keep
+> working as aliases of their target, and are still not listed in the tree.
+> `readTree` now `lstat`s entries, so a broken or looping symlink no longer
+> fails the whole listing, and with it search. Tests: `apps/api`
+> `storage/__tests__/symlinks.test.ts` and `routes/symlinks.test.ts` (shared
+> `__tests__/fixtures/symlinks.ts`), plus `apps/mcp`
+> `__tests__/symlinkConfinement.test.ts`. All three skip where the OS refuses to
+> create symlinks.
 
 > **Latest change.** **Read-only HTML documents + contextual tab accents**
 > (#112). `.html` / `.htm` files now sit beside markdown as a **read-only
@@ -474,7 +498,9 @@ apps/mcp (MCP stdio server, 28 tools) — exposes the vault to agents: list/list
 Key facts an agent must know:
 
 - **Storage is sandboxed** to `CONTENT_ROOT`. `PathResolver` rejects traversal
-  and absolute paths. Do not weaken this.
+  and absolute paths, and `resolveRealPath` / `ensureCreatableInsideRoot`
+  resolve symlinks so no read or write lands outside the real vault root. Do
+  not weaken this: send any new disk access to a vault path through them.
 - **Hidden dotfiles/dirs are excluded** from the tree. The audit log lives in
   `CONTENT_ROOT/.fsbrain/audit.jsonl`.
 - **`@repo/shared` is consumed as source** (`main: src/index.ts`); it has no
@@ -499,7 +525,7 @@ Key facts an agent must know:
 | Read-only HTML documents (`.html` / `.htm`) |   ✅   | `documents.ts`, `resolveDocumentPath`, `HtmlPreviewPane` + `html/sandbox.ts`; `list_documents` tool         |
 | Contextual tab accents (per-tab tokens)     |   ✅   | `--color-tab-*` in `styles.css` (both themes, ≥ 3:1), `data-tab`; guarded by `tabAccents.test.ts`           |
 | Browser-level HTML isolation tests          |   ✅   | `npm run test:browser` — Playwright 1.63.0 / real Chromium, `apps/web/browser/` (CI step)                   |
-| Path sandboxing inside `CONTENT_ROOT`       |   ✅   | `PathResolver`                                                                                              |
+| Path sandboxing inside `CONTENT_ROOT`       |   ✅   | `PathResolver`: lexical checks + `resolveRealPath` (realpath, so symlinks can't escape the vault)           |
 | Sidebar filter by **filename**              |   ✅   | `filterQuery` — name/path only, not file contents                                                           |
 | "Fix Format" via OpenRouter                 |   ✅   | Client-side only (`openrouter/`)                                                                            |
 | `[[wikilinks]]` (clickable) + resolution    |   ✅   | `markdown.ts`, `remarkWikilinks`                                                                            |

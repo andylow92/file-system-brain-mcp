@@ -50,7 +50,8 @@ Reads a document: a markdown note or a read-only HTML document.
   `.htm`) or a markdown note by `id` (frontmatter `id:`, when present — `?id=`
   never resolves to HTML). Any other extension → `400 invalid_path`.
 - Path must resolve under `CONTENT_ROOT`; traversal, absolute, and hidden paths
-  are rejected (`400 invalid_path`) for HTML exactly as for markdown.
+  are rejected (`400 invalid_path`) for HTML exactly as for markdown, including
+  through a symlink (see [Path confinement and symlinks](#path-confinement-and-symlinks)).
 - HTML is returned **verbatim** (byte-for-byte, UTF-8) — never sanitised,
   parsed for frontmatter, or converted.
 
@@ -797,6 +798,46 @@ curl "http://localhost:3001/api/feedback"                  # preview, files noth
 curl -X POST "http://localhost:3001/api/feedback/scan"     # scan + file proposals
 ```
 
+## Path confinement and symlinks
+
+Every path is checked twice before the API touches the disk:
+
+1. **Lexically.** The API rejects traversal (`..`), absolute paths, null bytes,
+   and hidden segments (dotfiles and dot-dirs such as `.fsbrain/`). It also
+   applies each operation's extension rule: `.md` for writes, and `.md`,
+   `.html`, or `.htm` for reads.
+2. **By real location.** The path is resolved with `realpath`, following every
+   symlink, and compared with the real `CONTENT_ROOT`. The root's real path is
+   resolved once, so a vault under a symlinked directory still works (macOS
+   `/tmp` → `/private/tmp`). The real location must pass the same rules as
+   the requested path: inside the vault, no hidden segment, and the same
+   document format.
+
+A path that fails either check gets `400 invalid_path`, and the API never reads
+or writes the file it points at. For symlinks, that means:
+
+- **A symlink that stays inside the vault works** as a second name for its
+  target, for reads and writes. Writing through it updates the target. Deleting
+  or moving it acts on the link itself, never on the target.
+- **A symlink that leaves the vault is refused** for every operation. That
+  includes paths that run through a symlinked folder, such as
+  `linkdir/note.md`. A link into `.fsbrain/` is refused too, and so is a link
+  that changes the document format. Otherwise an `x.md` link onto
+  `report.html` would make read-only HTML writable.
+- **Creating never follows a symlink.** A new note, folder, or move destination
+  is checked through its nearest existing parent folder. New files are opened
+  with `O_EXCL`, and a broken symlink in the way is a `400`. Reading a broken
+  symlink is a plain `404`, since nothing real is there.
+- **Listing never follows a symlink.** `GET /api/tree` still doesn't list
+  symlinks, and a broken or looping one no longer breaks the listing. A
+  recursive folder delete unlinks the symlinks inside the folder without
+  following them.
+
+The API can't create symlinks, so only the vault's owner can add one. The checks
+run right before each file access but aren't atomic with it. Swapping a symlink
+in between the check and the access is out of scope for this local, single-user
+tool.
+
 ## Provenance: the `X-Actor` header
 
 Mutating requests (`POST`/`PUT`/`PATCH`/`DELETE`) may send an `X-Actor` header
@@ -828,7 +869,9 @@ All failures use this shape:
 
 Standard error codes:
 
-- `invalid_path`: path traversal/absolute path/not-allowed extension.
+- `invalid_path`: path traversal/absolute path/hidden segment/not-allowed
+  extension, or a path whose real location (after symlinks) breaks those rules.
+  See [Path confinement and symlinks](#path-confinement-and-symlinks).
 - `not_found`: missing file or directory.
 - `validation_error`: invalid JSON schema/field type/empty value.
 - `io_error`: unexpected filesystem errors.

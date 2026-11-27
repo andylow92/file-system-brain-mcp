@@ -380,7 +380,10 @@ docs/      # Agent + human knowledge base. Start at implementation.md.
 - `@repo/shared` is consumed **as source** (`main: src/index.ts`). It has no test
   runner of its own — co-locate its unit tests in `apps/api` (node vitest).
 - The API is **markdown-focused** and sandboxed to `CONTENT_ROOT`; path handling
-  rejects traversal and absolute paths. Keep those guarantees intact.
+  rejects traversal and absolute paths, and resolves symlinks
+  (`PathResolver.resolveRealPath` / `ensureCreatableInsideRoot`) so no read or
+  write lands outside the real vault root. Keep those guarantees intact: route
+  any new disk access to a vault path through them.
 - **Provenance is a guarantee, not an option:** any new mutating path must read
   `X-Actor` and record an `AuditEntry`. Don't add writes that bypass the log.
 - **When the human should sign off on a change, propose it** (`propose_edit` /

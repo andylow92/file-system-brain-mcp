@@ -419,7 +419,9 @@ npm run format
 - API path handling rejects traversal and absolute paths.
 - File operations are markdown-focused (`.md`); `.html` / `.htm` documents are
   read-only (listed and read, never written).
-- Storage resolution ensures requests remain within `CONTENT_ROOT`.
+- Storage resolution ensures requests remain within `CONTENT_ROOT`, judged by
+  each path's real location: a symlink can't lead a read or write out of the
+  vault (see the API README's _Path confinement and symlinks_).
 - HTML documents render in a sandboxed, opaque-origin frame with a no-network
   CSP — no scripts, forms, popups, navigation, or access to the app (see
   [HTML documents](#html-documents-read-only)).
