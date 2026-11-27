@@ -4,7 +4,9 @@
    Register: product (a tool, not a landing page). See PRODUCT.md.
    Identity: graphite macOS chrome + a single system-blue accent, Fraunces
    italic for prose flavor, Inter Tight for UI. Every color below comes from
-   the token ramp — an ad-hoc hex anywhere else in this file is a bug.
+   the token ramp — an ad-hoc hex anywhere else in this file is a bug. The one
+   declared exception to "one accent": the per-viewer-tab accent set
+   (--color-tab-*), spent only on the active tab's indicator bar.
    ========================================================================== */
 
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@1,9..144,400;1,9..144,500&family=Inter+Tight:wght@400;500;600;700&display=swap');
@@ -56,6 +58,18 @@
   --color-file: #9298a4;
   --color-file-soft: rgba(146, 152, 164, 0.1);
   --row-height: 30px;
+
+  /* Viewer-tab accents: one restrained hue per tab, used only for the active
+     tab's indicator bar — never label text or surfaces. Each is ≥ 3:1 against
+     --color-bg (the surface behind the tab bar); enforced by tabAccents.test.ts.
+     Preview reuses system blue, Activity the success green. See PRODUCT.md. */
+  --color-tab-preview: #0a84ff;
+  --color-tab-source: #3fc6d9;
+  --color-tab-split: #9a7dff;
+  --color-tab-edit: #ff9f0a;
+  --color-tab-activity: #30d158;
+  --color-tab-review: #d86ef0;
+  --color-tab-graph: #ff5fa8;
 
   /* Overlay scrims + code-block inset. */
   --color-scrim: rgba(0, 0, 0, 0.45);
@@ -174,6 +188,15 @@
     --color-folder-ring: color-mix(in oklab, var(--color-folder) 32%, transparent);
     --color-file: #6e6e73;
     --color-file-soft: color-mix(in oklab, var(--color-file) 10%, white);
+
+    /* Viewer-tab accents, darkened to keep ≥ 3:1 on paper. */
+    --color-tab-preview: #007aff;
+    --color-tab-source: #0a7a8a;
+    --color-tab-split: #6a4ed8;
+    --color-tab-edit: #a65d00;
+    --color-tab-activity: #248a3d;
+    --color-tab-review: #a23bc4;
+    --color-tab-graph: #c2266f;
 
     --color-scrim: rgba(0, 0, 0, 0.28);
 
@@ -916,7 +939,8 @@ select:focus-visible {
   box-shadow: inset 0 0 0 1px var(--color-folder-ring);
 }
 
-.tree-icon-file {
+.tree-icon-file,
+.tree-icon-html {
   color: var(--color-file);
   background: var(--color-file-soft);
   box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-file) 24%, transparent);
@@ -969,7 +993,8 @@ select:focus-visible {
   box-shadow: none;
 }
 
-.tree-item.selected.tree-item-file .tree-icon-file {
+.tree-item.selected.tree-item-file .tree-icon-file,
+.tree-item.selected.tree-item-file .tree-icon-html {
   color: var(--color-on-accent);
   background: color-mix(in oklab, var(--color-on-accent) 18%, transparent);
   box-shadow: none;
@@ -1067,12 +1092,42 @@ select:focus-visible {
   opacity: 0.7;
 }
 
+/* Read-only HTML rows can't be dragged: no grip, no grab cursor. The handle
+   keeps its box so labels stay aligned with draggable siblings. */
+.tree-item-row[draggable='false'] {
+  cursor: pointer;
+}
+
+.tree-item .tree-drag-handle--none {
+  visibility: hidden;
+}
+
+/* File-type badge for HTML documents — text, so it never relies on colour. */
+.tree-badge {
+  flex-shrink: 0;
+  padding: 0 0.3rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  color: var(--color-text-muted);
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  line-height: 1.45;
+}
+
+.tree-item.selected .tree-badge {
+  color: var(--color-on-accent);
+  border-color: color-mix(in oklab, var(--color-on-accent) 55%, transparent);
+}
+
 /* -------------------------------------------------------------------------- */
 /* Tabs                                                                       */
 /* -------------------------------------------------------------------------- */
 
 .tabs {
   display: flex;
+  /* Wrap rather than force the viewer wider than a narrow screen. */
+  flex-wrap: wrap;
   gap: var(--space-fluid-3);
   margin-bottom: var(--space-fluid-5);
   padding-bottom: 0;
@@ -1103,6 +1158,91 @@ select:focus-visible {
 .tab.active {
   color: var(--color-text);
   border-bottom-color: var(--color-accent);
+}
+
+/* Viewer tabs carry `data-tab`; each maps to its application-owned accent.
+   Document CSS can never reach this bar (HTML previews are iframe-isolated).
+   Active = accent bar (shape) + full-ink, heavier label + aria-selected. */
+.tab[data-tab='preview'] {
+  --tab-accent: var(--color-tab-preview);
+}
+
+.tab[data-tab='source'] {
+  --tab-accent: var(--color-tab-source);
+}
+
+.tab[data-tab='split'] {
+  --tab-accent: var(--color-tab-split);
+}
+
+.tab[data-tab='edit'] {
+  --tab-accent: var(--color-tab-edit);
+}
+
+.tab[data-tab='activity'] {
+  --tab-accent: var(--color-tab-activity);
+}
+
+.tab[data-tab='review'] {
+  --tab-accent: var(--color-tab-review);
+}
+
+.tab[data-tab='graph'] {
+  --tab-accent: var(--color-tab-graph);
+}
+
+.tab[data-tab] {
+  border-bottom-width: 3px;
+}
+
+.tab[data-tab].active {
+  border-bottom-color: var(--tab-accent, var(--color-accent));
+  font-weight: 600;
+}
+
+/* Reserve the bold label's width so activating a tab never shifts its
+   neighbours. The ghost copy is hidden from layout height and from AT. */
+.tab-label {
+  display: inline-flex;
+  flex-direction: column;
+}
+
+.tab-label::after {
+  content: attr(data-label);
+  content: attr(data-label) / '';
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  font-weight: 600;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Read-only tabs (Split/Edit on an HTML document): still focusable so their
+   explanation is discoverable, visibly unavailable — not by colour alone. Only
+   the label dims, so the keyboard focus ring keeps full strength. */
+.tab[aria-disabled='true'] {
+  cursor: not-allowed;
+}
+
+.tab[aria-disabled='true'] .tab-label {
+  opacity: 0.5;
+}
+
+.tab[aria-disabled='true']:hover {
+  color: var(--color-text-muted);
+}
+
+.tab-readonly-chip {
+  align-self: center;
+  margin-left: auto;
+  padding: 0.1rem 0.6rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 999px;
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 .tab-content {
@@ -1853,6 +1993,70 @@ select:focus-visible {
   min-height: max(560px, calc(100vh - 240px));
   padding: var(--space-5) clamp(0.75rem, 2vw, 1.75rem);
   font-size: 1rem;
+}
+
+/* -------------------------------------------------------------------------- */
+/* HTML documents (read-only)                                                 */
+/* -------------------------------------------------------------------------- */
+
+.html-pane {
+  /* Fill the viewer below the tab bar without scrolling the page: 146px is the
+     fixed chrome above the frame (top bar, tab bar, caption); the rest is the
+     right panel's fluid padding (tabs margin + panel top/bottom padding). */
+  --html-pane-height: max(
+    420px,
+    calc(100vh - 146px - 2 * var(--space-fluid-5) - clamp(1.1rem, 3vw, 2.2rem))
+  );
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.html-pane__caption {
+  margin: 0;
+  color: var(--color-text-dim);
+  font-size: var(--type-caption);
+}
+
+.html-pane__notice {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-raised);
+  color: var(--color-text);
+  font-size: var(--type-label);
+}
+
+/* The document keeps its own design inside the frame, which fills the viewer
+   and scrolls on its own. `Canvas` (a system colour, deliberately not a token)
+   plus the inherited color-scheme make it look like the file opened in a
+   browser tab: a plain document gets an opaque light canvas even in the dark
+   theme, a dark-aware one follows the theme. Never force the document's colours. */
+.html-preview-frame {
+  display: block;
+  width: 100%;
+  height: var(--html-pane-height);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: Canvas;
+}
+
+.html-source {
+  margin: 0;
+  max-height: var(--html-pane-height);
+  overflow: auto;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-raised);
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: var(--type-label);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  tab-size: 2;
 }
 
 /* -------------------------------------------------------------------------- */

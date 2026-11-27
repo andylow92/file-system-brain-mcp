@@ -2,6 +2,16 @@
 
 The API exposes filesystem-backed endpoints for GitHub-like tree browsing and Notion-style content editing.
 
+**Document formats.** Markdown (`.md`) is the knowledge format: readable,
+writable, and indexed. HTML (`.html` / `.htm`) is a **read-only presentation
+format**: listed by `GET /api/tree` and read verbatim by `GET /api/file`, but
+every write endpoint keeps rejecting it (`400 invalid_path`, file untouched) and
+it never enters frontmatter / `id:`, wikilinks, backlinks, the graph, search,
+semantic / hybrid search, `context`, `think`, maintenance, skills, or feedback.
+The API never sanitises or rewrites HTML — the web UI isolates it at render
+time (see the README's _HTML documents_ section). Folder moves and deletes stay
+format-agnostic, so a folder that contains HTML moves or deletes as a whole.
+
 ## Endpoints
 
 ### `GET /health`
@@ -13,6 +23,18 @@ Simple service health check.
 Lists the directory tree recursively under the provided logical `path`.
 
 - `path` is optional. Empty path (`""`) lists the content root.
+- Lists folders plus supported documents only: `.md` notes and `.html` / `.htm`
+  documents. Hidden entries (dotfiles / dot-dirs such as `.fsbrain/`) and every
+  other extension are excluded.
+- Each file node carries `format`: `"markdown"` or `"html"` (folders have none):
+
+```json
+[
+  { "name": "notes", "path": "notes", "isDirectory": true, "children": [] },
+  { "name": "q3.html", "path": "q3.html", "isDirectory": false, "format": "html" },
+  { "name": "todo.md", "path": "todo.md", "isDirectory": false, "format": "markdown" }
+]
+```
 
 Example:
 
@@ -22,11 +44,15 @@ curl "http://localhost:3001/api/tree?path=notes"
 
 ### `GET /api/file?path=...` (or `?id=...`)
 
-Reads a markdown file.
+Reads a document: a markdown note or a read-only HTML document.
 
-- Address the note by `path` (logical path under `CONTENT_ROOT`) or by `id`
-  (frontmatter `id:`, when present). Only `.md` files are supported.
-- Path must resolve under `CONTENT_ROOT`.
+- Address it by `path` (logical path under `CONTENT_ROOT`; `.md`, `.html`, or
+  `.htm`) or a markdown note by `id` (frontmatter `id:`, when present — `?id=`
+  never resolves to HTML). Any other extension → `400 invalid_path`.
+- Path must resolve under `CONTENT_ROOT`; traversal, absolute, and hidden paths
+  are rejected (`400 invalid_path`) for HTML exactly as for markdown.
+- HTML is returned **verbatim** (byte-for-byte, UTF-8) — never sanitised,
+  parsed for frontmatter, or converted.
 
 Example:
 
@@ -40,11 +66,30 @@ Response includes:
 - `content`
 - `lastModified`
 - `etag` (for optimistic concurrency)
-- `id` — the note's stable id from frontmatter, when one is present
+- `format` — `"markdown"` or `"html"`
+- `mimeType` — `"text/markdown"` or `"text/html"`
+- `id` — the note's stable id from frontmatter, when one is present (markdown only)
+
+```json
+{
+  "path": "reports/q3.html",
+  "content": "<!DOCTYPE html>…",
+  "encoding": "utf-8",
+  "lastModified": "2026-06-02T…",
+  "etag": "9f2c…",
+  "format": "html",
+  "mimeType": "text/html"
+}
+```
+
+Markdown responses keep their existing fields and add `format: "markdown"` /
+`mimeType: "text/markdown"`, as do the responses of the write endpoints below.
 
 ### `PUT /api/file`
 
-Updates an existing markdown file.
+Updates an existing markdown file. (Markdown only: an `.html` / `.htm` path is
+rejected with `400 invalid_path` — HTML documents are read-only. The same holds
+for `PATCH /api/file` and `POST /api/file`.)
 
 Request body schema:
 
@@ -186,7 +231,9 @@ Request body schema:
 }
 ```
 
-Supports directories and markdown files.
+Supports directories and markdown files. A read-only HTML document can't be
+moved or renamed (`400 invalid_path`), and a markdown note can't be renamed to
+`.html`; a folder containing HTML moves as a whole.
 
 Example:
 
@@ -198,7 +245,9 @@ curl -X PATCH "http://localhost:3001/api/path" \
 
 ### `DELETE /api/path?path=...&recursive=...`
 
-Deletes a markdown file or directory.
+Deletes a markdown file or directory. Deleting a single HTML document is
+rejected (`400 invalid_path`); a folder that contains HTML can be deleted with
+`recursive`.
 
 - `path` (required): file or directory path.
 - `recursive` (optional): `true`/`1` to recursively delete non-empty directories.
@@ -295,7 +344,7 @@ description? }[]` — the typed **frontmatter** relations a note of that type ma
 Reads a single block (paragraph / list-item / heading section) carrying the
 `^block-id` anchor, plus a few lines of surrounding context. Address the note
 by `path` or by stable `id`. Returns `404 not_found` when the anchor is not
-present.
+present. Markdown only (`.html` → `400 invalid_path`), like `/api/block-anchors`.
 
 ```json
 {
@@ -575,8 +624,10 @@ Implementation notes:
   it right where it records the audit entry, so the stream and the audit log
   never diverge.
 - A filesystem watcher (`fs.watch`, recursive) covers out-of-band edits. It
-  ignores the hidden `.fsbrain/` dir and non-`.md` churn, and de-dupes against
-  API-originated writes so a single change does not double-fire.
+  ignores the hidden `.fsbrain/` dir (and every dotfile / dot-dir) and anything
+  that isn't a supported document — `.md`, `.html`, `.htm` all emit events, so
+  an HTML report regenerated on disk refreshes the open preview — and de-dupes
+  against API-originated writes so a single change does not double-fire.
 - The stream sends periodic heartbeat comments to keep the connection alive and
   cleans up on client disconnect. The route is never buffered or compressed.
 - No CORS headers are set, matching the rest of the API. The web client reaches

@@ -22,6 +22,7 @@ import { fileURLToPath } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { createServer as createApiServer, loadConfig, type ServerConfig } from '@repo/api';
+import { documentFormatForPath, mimeTypeForFormat } from '@repo/shared';
 import { z } from 'zod';
 
 import { registerRocketReachTools } from './rocketreach.js';
@@ -34,6 +35,7 @@ import type {
   BlockAnchor,
   CategoryStat,
   ContextBundle,
+  DocumentFormat,
   EditProposal,
   FeedbackFinding,
   FileNode,
@@ -97,16 +99,23 @@ function createApiClient(context: AppContext) {
   };
 }
 
-function flattenFiles(nodes: FileNode[]): string[] {
-  const paths: string[] = [];
+/**
+ * Every document in a tree with its format. Falls back to the extension when a
+ * node carries no `format` (an older API attached via `API_BASE_URL`).
+ */
+function flattenDocuments(nodes: FileNode[]): Array<{ path: string; format: DocumentFormat }> {
+  const documents: Array<{ path: string; format: DocumentFormat }> = [];
   for (const node of nodes) {
     if (node.isDirectory) {
-      paths.push(...flattenFiles(node.children ?? []));
-    } else {
-      paths.push(node.path);
+      documents.push(...flattenDocuments(node.children ?? []));
+      continue;
+    }
+    const format = node.format ?? documentFormatForPath(node.path);
+    if (format) {
+      documents.push({ path: node.path, format });
     }
   }
-  return paths;
+  return documents;
 }
 
 /** Wrap a handler so API errors become readable tool errors instead of crashes. */
@@ -212,20 +221,50 @@ function registerTools(
 
   register(
     'list_notes',
-    'List all markdown note paths in the vault (optionally under a subtree).',
+    'List all markdown note paths in the vault (optionally under a subtree). ' +
+      'Read-only HTML documents are listed separately by `list_documents`.',
     { path: z.string().optional().describe('Subtree path; omit for the whole vault.') },
     tool(async ({ path: subtree }: { path?: string }) => {
       const query = subtree ? `?path=${encodeURIComponent(subtree)}` : '';
       const tree = await apiRequest<FileNode[]>(`/api/tree${query}`);
-      return { paths: flattenFiles(tree) };
+      // Markdown notes only — read-only HTML documents are listed by `list_documents`.
+      const paths = flattenDocuments(tree)
+        .filter((document) => document.format === 'markdown')
+        .map((document) => document.path);
+      return { paths };
+    }),
+  );
+
+  register(
+    'list_documents',
+    'List every supported document in the vault (optionally under a subtree) with ' +
+      'its `format` and `mimeType`: markdown notes (`markdown`, text/markdown) and ' +
+      'HTML documents (`html`, text/html — `.html` / `.htm`). Read any of them with ' +
+      '`read_note`, which returns the original source verbatim. HTML documents are ' +
+      'read-only (create/update/patch/move/delete are markdown-only) and are not ' +
+      'indexed for search, wikilinks, backlinks, or the graph. Returns ' +
+      '{ documents: [{ path, format, mimeType }] }.',
+    { path: z.string().optional().describe('Subtree path; omit for the whole vault.') },
+    tool(async ({ path: subtree }: { path?: string }) => {
+      const query = subtree ? `?path=${encodeURIComponent(subtree)}` : '';
+      const tree = await apiRequest<FileNode[]>(`/api/tree${query}`);
+      const documents = flattenDocuments(tree).map((document) => ({
+        ...document,
+        mimeType: mimeTypeForFormat(document.format),
+      }));
+      return { documents };
     }),
   );
 
   register(
     'read_note',
-    'Read the markdown content of a note by its logical path or its stable id.',
+    'Read a document by its logical path, or a markdown note by its stable id. ' +
+      'Returns the source plus `etag`, `lastModified`, `format` ("markdown" | ' +
+      '"html") and `mimeType`; markdown notes also carry their frontmatter `id`. ' +
+      'Works for read-only HTML documents (`.html` / `.htm`, see `list_documents`), ' +
+      'returned verbatim — the block, patch, update, and move tools are markdown-only.',
     {
-      path: z.string().optional().describe('Logical path, e.g. "notes/idea.md".'),
+      path: z.string().optional().describe('Logical path, e.g. "notes/idea.md" or "report.html".'),
       id: z.string().optional().describe('Stable note id from frontmatter `id:`.'),
     },
     tool(async ({ path: notePath, id }: { path?: string; id?: string }) => {

@@ -1,6 +1,7 @@
 # The repo's quality gate, mirroring the local commands in AGENTS.md:
 # `npm test` (all workspaces, incl. the fresh-clone MCP e2e and the retrieval
-# eval harness), `npm run lint`, `npm run build`, and `npm run format`.
+# eval harness), `npm run test:browser` (real-Chromium security tests for the
+# sandboxed HTML preview), `npm run lint`, `npm run build`, and `npm run format`.
 name: CI
 
 on:
@@ -31,6 +32,14 @@ jobs:
 
       - name: Test
         run: npm test
+
+      # Downloads the Chromium build matching the exactly-pinned `playwright`
+      # devDependency in apps/web.
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser tests
+        run: npm run test:browser
 
       - name: Lint
         run: npm run lint

@@ -1,7 +1,15 @@
+import type { DocumentFormat } from './documents.js';
+
 export interface FileNode {
   name: string;
   path: string;
   isDirectory: boolean;
+  /**
+   * The document format of a file node (`markdown` or read-only `html`), set by
+   * the API on every file; absent on directories. Optional so older clients and
+   * fixtures keep compiling — derive it with `documentFormatForPath` when absent.
+   */
+  format?: DocumentFormat;
   children?: FileNode[];
 }
 
@@ -149,6 +157,7 @@ export interface EditProposal {
 
 export * from './blocks.js';
 export * from './context.js';
+export * from './documents.js';
 export * from './embeddings.js';
 export * from './feedback.js';
 export * from './graph.js';

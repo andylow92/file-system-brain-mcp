@@ -1,6 +1,8 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
+import { documentFormatForPath, type DocumentFormat } from '@repo/shared';
+
 import { PathResolver, StoragePathError } from './pathResolver.js';
 
 export interface TreeNode {
@@ -8,6 +10,8 @@ export interface TreeNode {
   isDirectory: boolean;
   path: string;
   lastModified: string;
+  /** Document format of a file node; absent on directories. */
+  format?: DocumentFormat;
   children?: TreeNode[];
 }
 
@@ -83,12 +87,16 @@ export function createFileRepository(pathResolver: PathResolver): FileRepository
         continue;
       }
 
-      if (entry.isFile() && entry.name.toLowerCase().endsWith('.md')) {
+      // Supported documents only: markdown notes plus read-only HTML
+      // (`.html` / `.htm`). Every other extension stays out of the tree.
+      const format = entry.isFile() ? documentFormatForPath(entry.name) : null;
+      if (format) {
         nodes.push({
           name: entry.name,
           isDirectory: false,
           path: relativePath,
           lastModified: stat.mtime.toISOString(),
+          format,
         });
       }
     }

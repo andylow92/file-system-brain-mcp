@@ -34,7 +34,8 @@ import {
  * ranking is identical to reading the vault fresh each time.
  *
  * Conventions preserved: `.fsbrain/` and other dotfiles never enter the corpus
- * (they are already excluded from `listTree`).
+ * (they are already excluded from `listTree`), and neither do read-only HTML
+ * documents — the tree lists them, but the corpus is markdown notes only.
  */
 export interface VaultIndex {
   /** The cached corpus (logical path → content), refreshed lazily before return. */
@@ -47,12 +48,13 @@ export interface VaultIndex {
   close(): void;
 }
 
+/** Markdown note paths only — HTML documents in the tree never enter the corpus. */
 function flattenMarkdownPaths(nodes: TreeNode[]): string[] {
   const paths: string[] = [];
   for (const node of nodes) {
     if (node.isDirectory) {
       paths.push(...flattenMarkdownPaths(node.children ?? []));
-    } else {
+    } else if (node.format === 'markdown') {
       paths.push(node.path);
     }
   }

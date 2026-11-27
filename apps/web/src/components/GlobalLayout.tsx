@@ -7,12 +7,21 @@ import {
   type KeyboardEvent,
   type PropsWithChildren,
 } from 'react';
-import type { FileNode } from '@repo/shared';
+import { documentFormatForPath, type FileNode } from '@repo/shared';
 import type { LiveStatus } from '../hooks/useVaultEvents';
 import { ModalDialog } from './ModalDialog';
 import { SettingsDialog } from './SettingsDialog';
 
 const ROOT_DROP_KEY = '__root__';
+
+/** HTML documents are a read-only presentation format: no rename / move / delete. */
+const HTML_READ_ONLY = 'HTML documents are read-only';
+
+function isHtmlFile(node: FileNode | undefined): boolean {
+  return Boolean(
+    node && !node.isDirectory && (node.format ?? documentFormatForPath(node.path)) === 'html',
+  );
+}
 
 interface GlobalLayoutProps extends PropsWithChildren {
   tree: FileNode[];
@@ -335,6 +344,10 @@ export function GlobalLayout({
     const source = findNode(sourcePath);
     if (!source) {
       return { ok: false, reason: 'Could not find dragged item.' };
+    }
+
+    if (isHtmlFile(source)) {
+      return { ok: false, reason: `${HTML_READ_ONLY} and cannot be moved.` };
     }
 
     const currentParent = getParentDirectoryPath(sourcePath) ?? '';
@@ -688,6 +701,11 @@ export function GlobalLayout({
           return;
         }
 
+        if (isHtmlFile(selectedNode)) {
+          setValidationMessage(`${HTML_READ_ONLY} and cannot be renamed.`);
+          return;
+        }
+
         const parentPath = getParentDirectoryPath(selectedNode.path);
         const nextPath = parentPath ? `${parentPath}/${cleanName}` : cleanName;
 
@@ -741,6 +759,11 @@ export function GlobalLayout({
 
     const selectedNode = flatTree.find((entry) => entry.node.path === selectedPath)?.node;
     if (!selectedNode) {
+      return;
+    }
+
+    if (isHtmlFile(selectedNode)) {
+      showToast('info', `${HTML_READ_ONLY} and cannot be deleted.`);
       return;
     }
 
@@ -829,6 +852,10 @@ export function GlobalLayout({
   }
 
   const hasSelection = !!selectedPath;
+  const selectionIsHtml = isHtmlFile(findNode(selectedPath));
+  const openFileIsHtml = selectedFilePath
+    ? documentFormatForPath(selectedFilePath) === 'html'
+    : false;
 
   return (
     <div className="app-shell">
@@ -885,9 +912,15 @@ export function GlobalLayout({
               {liveStatus === 'reconnecting' ? 'Reconnecting' : 'Live'}
             </span>
           ) : null}
-          <span className={isDirty ? 'topbar-status is-dirty' : 'topbar-status'}>
-            {isDirty ? 'Unsaved' : 'Saved'}
-          </span>
+          {openFileIsHtml ? (
+            <span className="topbar-status is-readonly" title={HTML_READ_ONLY}>
+              Read-only
+            </span>
+          ) : (
+            <span className={isDirty ? 'topbar-status is-dirty' : 'topbar-status'}>
+              {isDirty ? 'Unsaved' : 'Saved'}
+            </span>
+          )}
           {/* Labeled on purpose: this is the only human entry point to the
               integrations config, and as a bare 16px muted glyph it read as
               decoration and was missed entirely. */}
@@ -907,8 +940,8 @@ export function GlobalLayout({
             type="button"
             className="save-button topbar-save"
             onClick={() => void handleTopSave()}
-            disabled={!isDirty}
-            title="Save (⌘S)"
+            disabled={!isDirty || openFileIsHtml}
+            title={openFileIsHtml ? HTML_READ_ONLY : 'Save (⌘S)'}
           >
             Save
             <kbd className="save-kbd" aria-hidden="true">
@@ -976,8 +1009,8 @@ export function GlobalLayout({
                 type="button"
                 className="action-btn"
                 onClick={() => setMode('rename')}
-                disabled={!hasSelection}
-                title="Rename"
+                disabled={!hasSelection || selectionIsHtml}
+                title={selectionIsHtml ? `Rename — ${HTML_READ_ONLY}` : 'Rename'}
                 aria-label="Rename"
               >
                 <IconRename />
@@ -986,8 +1019,8 @@ export function GlobalLayout({
                 type="button"
                 className="action-btn action-btn-danger"
                 onClick={handleDelete}
-                disabled={!hasSelection}
-                title="Delete"
+                disabled={!hasSelection || selectionIsHtml}
+                title={selectionIsHtml ? `Delete — ${HTML_READ_ONLY}` : 'Delete'}
                 aria-label="Delete"
               >
                 <IconTrash />
@@ -1115,11 +1148,24 @@ export function GlobalLayout({
                         }
 
                         const isExpanded = node.isDirectory && !collapsedFolders.has(node.path);
+                        const isHtml = isHtmlFile(node);
 
                         const icon = node.isDirectory ? (
                           <span className="tree-icon tree-icon-folder" aria-hidden="true">
                             <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
                               <path d="M1.75 3A1.75 1.75 0 0 0 0 4.75v6.5C0 12.216.784 13 1.75 13h12.5A1.75 1.75 0 0 0 16 11.25V5.75A1.75 1.75 0 0 0 14.25 4H8.5L7.057 2.557A1.5 1.5 0 0 0 5.997 2H1.75A1.75 1.75 0 0 0 0 3.75v.31C.495 3.388 1.083 3 1.75 3z" />
+                            </svg>
+                          </span>
+                        ) : isHtml ? (
+                          <span className="tree-icon tree-icon-html" aria-hidden="true">
+                            <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                              <path
+                                d="M5.25 4.5 1.75 8l3.5 3.5M10.75 4.5l3.5 3.5-3.5 3.5M9.25 2.75l-2.5 10.5"
+                                stroke="currentColor"
+                                strokeWidth="1.4"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
                             </svg>
                           </span>
                         ) : (
@@ -1140,8 +1186,13 @@ export function GlobalLayout({
                               tabIndex={selectedPath === node.path ? 0 : -1}
                               className="tree-item-row"
                               style={{ paddingLeft: `${depth * 14 + 6}px` }}
-                              draggable={true}
-                              onDragStart={(event) => handleItemDragStart(event, node.path)}
+                              // Read-only HTML can't be moved, so it can't be dragged.
+                              draggable={!isHtml}
+                              onDragStart={
+                                isHtml
+                                  ? undefined
+                                  : (event) => handleItemDragStart(event, node.path)
+                              }
                               onDragEnd={handleItemDragEnd}
                               onDragEnter={(event) => handleItemDragOver(event, node)}
                               onDragOver={(event) => handleItemDragOver(event, node)}
@@ -1156,11 +1207,16 @@ export function GlobalLayout({
                               }}
                               data-path={node.path}
                               data-kind={node.isDirectory ? 'directory' : 'file'}
+                              data-format={isHtml ? 'html' : undefined}
                             >
                               <span
-                                className="tree-drag-handle"
+                                className={
+                                  isHtml
+                                    ? 'tree-drag-handle tree-drag-handle--none'
+                                    : 'tree-drag-handle'
+                                }
                                 aria-hidden="true"
-                                title={`Drag ${node.name}`}
+                                title={isHtml ? undefined : `Drag ${node.name}`}
                               >
                                 <svg viewBox="0 0 16 16" aria-hidden="true">
                                   <circle cx="6" cy="4" r="1" fill="currentColor" />
@@ -1187,6 +1243,11 @@ export function GlobalLayout({
                               )}
                               {icon}
                               <span className="tree-label">{node.name}</span>
+                              {isHtml ? (
+                                <span className="tree-badge" title={HTML_READ_ONLY}>
+                                  HTML
+                                </span>
+                              ) : null}
                             </div>
                           </li>
                         );

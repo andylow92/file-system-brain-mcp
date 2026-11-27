@@ -1,11 +1,12 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
-import type { FileNode } from '@repo/shared';
+import { documentFormatForPath, type DocumentFormat, type FileNode } from '@repo/shared';
 import { useVaultEvents } from './hooks/useVaultEvents';
 import { ActivityPanel } from './components/ActivityPanel';
 import { BacklinksPanel } from './components/BacklinksPanel';
 import { FileViewerTabs, type ViewerTabKey } from './components/FileViewerTabs';
 import { GlobalLayout } from './components/GlobalLayout';
 import { GraphView } from './components/GraphView';
+import { HtmlPreviewPane, HtmlSourcePane } from './components/HtmlPreviewPane';
 import { MaintenancePanel } from './components/MaintenancePanel';
 import { ReviewPanel } from './components/ReviewPanel';
 import { SearchDialog } from './components/SearchDialog';
@@ -77,6 +78,13 @@ export function App() {
 
   const currentSavedFile = selectedFilePath ? savedFiles[selectedFilePath] : undefined;
   const currentSavedMarkdown = currentSavedFile?.content ?? '';
+  // Known from the path the moment a file is selected (so an HTML document
+  // never flashes the markdown editor while loading), confirmed by the response.
+  const openFormat: DocumentFormat =
+    currentSavedFile?.format ??
+    (selectedFilePath ? documentFormatForPath(selectedFilePath) : null) ??
+    'markdown';
+  const isHtmlOpen = openFormat === 'html';
   const currentDraftMarkdown = selectedFilePath
     ? (draftContents[selectedFilePath] ?? currentSavedMarkdown)
     : '';
@@ -93,13 +101,14 @@ export function App() {
     ? currentDraftMarkdown !== currentSavedMarkdown
     : false;
 
+  // Markdown notes only: `[[wikilinks]]` never resolve to read-only HTML documents.
   const allPaths = useMemo(() => {
     const paths: string[] = [];
     const walk = (nodes: FileNode[]) => {
       for (const node of nodes) {
         if (node.isDirectory) {
           walk(node.children ?? []);
-        } else {
+        } else if ((node.format ?? documentFormatForPath(node.path)) === 'markdown') {
           paths.push(node.path);
         }
       }
@@ -452,45 +461,58 @@ export function App() {
         <FileViewerTabs
           activeTab={activeTab}
           onTabChange={setActiveTab}
+          documentFormat={openFormat}
           preview={
-            <>
-              <Suspense fallback={<p className="empty-state">Loading preview…</p>}>
-                <MarkdownPreviewPane
+            isHtmlOpen ? (
+              <HtmlPreviewPane filePath={selectedFilePath} source={currentSavedFile?.content} />
+            ) : (
+              <>
+                <Suspense fallback={<p className="empty-state">Loading preview…</p>}>
+                  <MarkdownPreviewPane
+                    filePath={selectedFilePath}
+                    markdown={currentDraftMarkdown}
+                    allPaths={allPaths}
+                    onNavigate={(path) => {
+                      void navigateToFile(path);
+                    }}
+                  />
+                </Suspense>
+                <BacklinksPanel
                   filePath={selectedFilePath}
-                  markdown={currentDraftMarkdown}
-                  allPaths={allPaths}
-                  onNavigate={(path) => {
+                  refreshKey={allPaths.length}
+                  onSelectFile={(path) => {
                     void navigateToFile(path);
                   }}
                 />
-              </Suspense>
-              <BacklinksPanel
-                filePath={selectedFilePath}
-                refreshKey={allPaths.length}
-                onSelectFile={(path) => {
-                  void navigateToFile(path);
-                }}
-              />
-            </>
+              </>
+            )
+          }
+          source={
+            isHtmlOpen ? (
+              <HtmlSourcePane filePath={selectedFilePath} source={currentSavedFile?.content} />
+            ) : null
           }
           edit={
-            <RichTextEditorPane
-              filePath={selectedFilePath}
-              markdown={currentDraftMarkdown}
-              savedMarkdown={currentSavedMarkdown}
-              isDirty={isCurrentFileDirty}
-              onSave={triggerSave}
-              onChangeMarkdown={(nextValue: string) => {
-                if (!selectedFilePath) {
-                  return;
-                }
+            // HTML is read-only: the editor is never rendered, so no draft can exist.
+            isHtmlOpen ? null : (
+              <RichTextEditorPane
+                filePath={selectedFilePath}
+                markdown={currentDraftMarkdown}
+                savedMarkdown={currentSavedMarkdown}
+                isDirty={isCurrentFileDirty}
+                onSave={triggerSave}
+                onChangeMarkdown={(nextValue: string) => {
+                  if (!selectedFilePath) {
+                    return;
+                  }
 
-                setDraftContents((current) => ({
-                  ...current,
-                  [selectedFilePath]: nextValue,
-                }));
-              }}
-            />
+                  setDraftContents((current) => ({
+                    ...current,
+                    [selectedFilePath]: nextValue,
+                  }));
+                }}
+              />
+            )
           }
           activity={
             <ActivityPanel

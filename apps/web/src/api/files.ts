@@ -2,6 +2,7 @@ import type {
   ApiResponse,
   AuditEntry,
   Backlink,
+  DocumentFormat,
   EditProposal,
   FileNode,
   GraphData,
@@ -18,6 +19,9 @@ export interface RemoteFile {
   encoding: 'utf-8';
   lastModified: string;
   etag: string;
+  /** `markdown` (editable) or read-only `html`, whose `content` is the verbatim source. */
+  format: DocumentFormat;
+  mimeType: string;
 }
 
 interface PathMutationResponse {

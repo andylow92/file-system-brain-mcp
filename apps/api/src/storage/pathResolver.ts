@@ -1,5 +1,7 @@
 import path from 'node:path';
 
+import { documentFormatForPath, type DocumentFormat } from '@repo/shared';
+
 export class StoragePathError extends Error {
   constructor(message: string) {
     super(message);
@@ -13,6 +15,7 @@ export interface PathResolver {
   getRootPath(): string;
   resolvePath(logicalPath: string): string;
   resolveMarkdownPath(logicalPath: string): string;
+  resolveDocumentPath(logicalPath: string): { absolutePath: string; format: DocumentFormat };
   normalizeLogicalPath(logicalPath: string): string;
   ensureInsideRoot(absolutePath: string): void;
 }
@@ -88,10 +91,31 @@ export function createPathResolver(contentRoot: string | undefined): PathResolve
     return absolutePath;
   }
 
+  /**
+   * Resolve a path to any readable vault document — markdown or read-only HTML
+   * (see `documentFormatForPath`). Same normalisation and root confinement as
+   * `resolveMarkdownPath`; only reads use it, every write stays markdown-only.
+   */
+  function resolveDocumentPath(logicalPath: string): {
+    absolutePath: string;
+    format: DocumentFormat;
+  } {
+    const normalized = normalizeLogicalPath(logicalPath);
+    const format = documentFormatForPath(normalized);
+    if (!format) {
+      throw new StoragePathError('Only .md, .html, or .htm files can be read');
+    }
+
+    const absolutePath = path.resolve(rootPath, normalized);
+    ensureInsideRoot(absolutePath);
+    return { absolutePath, format };
+  }
+
   return {
     getRootPath: () => rootPath,
     resolvePath,
     resolveMarkdownPath,
+    resolveDocumentPath,
     normalizeLogicalPath,
     ensureInsideRoot,
   };

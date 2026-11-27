@@ -11,7 +11,7 @@
 
 > **A local-first markdown vault you can hand to an AI agent — and it gets better
 > the more you use it.** Browse it like a **GitHub file tree**, edit it like
-> **Notion**, and plug it into Claude, Cursor, or any **MCP** host as **27 agent
+> **Notion**, and plug it into Claude, Cursor, or any **MCP** host as **28 agent
 > tools** — semantic & hybrid search, RAG context, and cited answers. The vault
 > **self-improves**: it learns your writing voice from your draft→final edits and
 > self-tidies broken links, orphans, and duplicates — every change lands in a
@@ -59,6 +59,8 @@ This repo bridges both worlds:
 - Search across notes — **full-text**, **semantic**, and **hybrid** (Ctrl/Cmd-K)
 - Link notes with `[[wikilinks]]`, browse **backlinks**, and explore an
   interactive **knowledge graph**
+- Open self-contained **HTML reports** next to your notes — rendered with their
+  own design in an isolated, read-only preview (see [HTML documents](#html-documents-read-only))
 - Hand the vault to an AI agent through a built-in **MCP server**
   (read / search / patch / propose), with every agent write attributed in an
   audit log so the human can see what changed
@@ -82,7 +84,7 @@ in your notes goes through a **review queue you approve**.
   can't fully answer, so you know what's missing.
 - **🔌 Plug in any AI agent (MCP).** A built-in
   [MCP](https://modelcontextprotocol.io) server hands the whole vault to agents
-  like Claude, Cursor, or OpenClaw as **27 tools** (read, search, patch,
+  like Claude, Cursor, or OpenClaw as **28 tools** (read, search, patch,
   propose…). **Every agent write is logged** to an audit trail, and edits land as
   **proposals you approve** — the agent suggests, only you commit.
 - **🧹 Self-tidying vault (maintenance).** A "dream-cycle" scan finds **broken
@@ -153,7 +155,7 @@ apps/api (Node HTTP server)
    └─ Search (text/semantic/hybrid), backlinks, graph, think, audit, proposals
 
 apps/mcp (MCP stdio server)
-   ├─ Exposes the vault to AI agents as 27 tools
+   ├─ Exposes the vault to AI agents as 28 tools
    └─ Embeds the API in-process — one self-contained command for an MCP host
 
 packages/shared
@@ -226,8 +228,8 @@ npm run start:agent      # launches the self-contained fsbrain-mcp on stdio
 ```
 
 `fsbrain-mcp` embeds the storage API in-process and auto-creates the vault
-at `~/.fsbrain/vault` (override with `CONTENT_ROOT=...`). It exposes 27
-vault tools (`list_notes`, `read_note`, `create_note`, `patch_note`,
+at `~/.fsbrain/vault` (override with `CONTENT_ROOT=...`). It exposes 28
+vault tools (`list_notes`, `list_documents`, `read_note`, `create_note`, `patch_note`,
 `semantic_search`, `hybrid_search`, `think`, `get_graph`, `propose_edit`,
 `run_maintenance`, `list_skills`, `curate_skills`, `run_feedback`, `proposal_stats`, …) and records every agent write to
 `<vault>/.fsbrain/audit.jsonl` so you can always see what the agent did.
@@ -241,6 +243,56 @@ vault tools (`list_notes`, `read_note`, `create_note`, `patch_note`,
 > `npm run start:agent` without `CONTENT_ROOT` set will now read the new
 > path. Set `CONTENT_ROOT=./content` (in `apps/api/.env` or your shell) to
 > keep the old location.
+
+---
+
+## HTML documents (read-only)
+
+Agent-generated reports, visual briefs, and styled reference pages can live in
+the vault as plain `.html` / `.htm` files beside your notes. They appear in the
+tree with an **HTML** badge and open in a **Preview** that keeps the document's
+own layout, typography, and colours, plus a read-only **Source** tab. Markdown
+stays the knowledge format; HTML is a presentation format, never converted.
+
+**Supported subset — self-contained documents:**
+
+- HTML structure, classes, and inline SVG;
+- CSS in `<style>` blocks and `style=""` attributes (media queries,
+  `@font-face`, `color-scheme` — a dark-aware document follows the app theme);
+- images and fonts embedded as `data:` URIs;
+- in-page `#fragment` links, which scroll within the document;
+- UTF-8 text.
+
+**Restrictions (by design):**
+
+- **No scripts** — `<script>`, inline event handlers, and `javascript:` URLs
+  never run.
+- **No network** — external _and_ relative assets (images, stylesheets, fonts,
+  frames, media, prefetches) are never fetched; inline them as `data:` URIs.
+- **No forms, popups, downloads, or navigation** — links other than
+  `#fragment`s are inert, and nothing can navigate or reach the app.
+- **Read-only** — HTML can't be edited, created, renamed, moved, or deleted
+  through the UI, the API, or MCP (Split and Edit are shown but disabled). Edit
+  the file on disk and the open preview refreshes live. Folders containing HTML
+  still move and delete as a whole.
+- **Not indexed** — HTML is never parsed for frontmatter, `[[wikilinks]]`,
+  `#tags`, backlinks, the graph, search (text / semantic / hybrid), `think`,
+  context bundles, maintenance, or skills.
+- **UTF-8 only** — other charsets are not converted.
+
+**How it's isolated.** The API returns the source verbatim
+(`GET /api/file` → `format: "html"`, `mimeType: "text/html"`); isolation happens
+when the web app renders it. The preview is an `<iframe sandbox="" srcdoc>`: an
+opaque origin with no scripts, forms, popups, or top-level navigation, and no
+access to the app's DOM, storage, cookies, or APIs. Its document starts with a
+CSP that blocks every network load (`default-src 'none'; style-src
+'unsafe-inline'; img-src data:; font-src data:; form-action 'none'`). A light
+sanitiser adds defense in depth: it strips scripts, handlers, `<link>`, author
+`<base>`, and `meta http-equiv`, and retargets links so a click can't navigate
+the frame (the one thing the browser layer alone would still allow, for links
+that explicitly target the frame). `npm run test:browser` proves all of this in
+real Chromium. Agents list HTML with the `list_documents` MCP tool and read it
+with `read_note`; `list_notes` stays markdown-only.
 
 ---
 
@@ -318,7 +370,7 @@ FSBRAIN_EMBEDDINGS=on EMBEDDINGS_API_KEY=sk-... npm run dev:api
 
 - `GET /health`
 - `GET /api/tree?path=...`
-- `GET /api/file?path=...` (or `?id=...`)
+- `GET /api/file?path=...` (or `?id=...`) — markdown or read-only HTML, with `format` + `mimeType`
 - `POST /api/file` · `PUT /api/file` · `PATCH /api/file` (granular ops)
 - `POST /api/dir`
 - `PATCH /api/path` (move/rename) · `DELETE /api/path?path=...&recursive=true|false`
@@ -355,6 +407,7 @@ Agents typically reach these via the MCP tools — see [`apps/mcp/README.md`](ap
 
 ```bash
 npm test
+npm run test:browser   # real-Chromium security tests for the HTML preview
 npm run lint
 npm run format
 ```
@@ -364,8 +417,12 @@ npm run format
 ## Security model (important)
 
 - API path handling rejects traversal and absolute paths.
-- File operations are markdown-focused (`.md`).
+- File operations are markdown-focused (`.md`); `.html` / `.htm` documents are
+  read-only (listed and read, never written).
 - Storage resolution ensures requests remain within `CONTENT_ROOT`.
+- HTML documents render in a sandboxed, opaque-origin frame with a no-network
+  CSP — no scripts, forms, popups, navigation, or access to the app (see
+  [HTML documents](#html-documents-read-only)).
 
 This helps protect the host filesystem while still enabling file-based workflows.
 
@@ -388,6 +445,8 @@ See the full deployment examples in this README’s history and backend docs.
 - ✅ Self-improving outreach **feedback loop** — learns your voice from draft→final edits
 - ✅ Typed page types / **schema packs** — canonical `type:`s, graph colouring, validation
 - ✅ Mermaid diagrams — fenced ` ```mermaid ` blocks render as SVG in the preview
+- ✅ Read-only HTML documents — styled reports render in an isolated sandbox
+- Vault-scoped asset resolver for relative assets in HTML documents
 - Real vector embeddings (the cached index is the seam)
 - Git sync workflows
 - Multi-user auth + permissions

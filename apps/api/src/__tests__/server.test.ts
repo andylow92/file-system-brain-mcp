@@ -149,6 +149,7 @@ describe('server bootstrap', () => {
             name: 'guide.md',
             path: 'docs/guide.md',
             isDirectory: false,
+            format: 'markdown',
           },
         ],
       },
