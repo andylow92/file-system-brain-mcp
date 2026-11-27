@@ -41,9 +41,51 @@ export function createFileRepository(pathResolver: PathResolver): FileRepository
     }
   }
 
+  /** Like `statOrUndefined`, but a symlink (even a broken one) counts as existing. */
+  async function lstatOrUndefined(absolutePath: string) {
+    try {
+      return await fs.lstat(absolutePath);
+    } catch (error: unknown) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return undefined;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * The confined real path (`pathResolver.resolveRealPath`), or `undefined`
+   * when nothing real exists there. Every operation on an existing path below
+   * resolves it here first (creates use `ensureCreatableInsideRoot`), so a
+   * symlink can never carry an operation outside the vault.
+   */
+  async function realPathOrUndefined(absolutePath: string): Promise<string | undefined> {
+    try {
+      return await pathResolver.resolveRealPath(absolutePath);
+    } catch (error: unknown) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return undefined;
+      }
+      throw error;
+    }
+  }
+
+  /** The real path of an existing markdown note, confined to the vault. */
+  async function realMarkdownFilePath(logicalPath: string): Promise<string> {
+    const realPath = await realPathOrUndefined(pathResolver.resolveMarkdownPath(logicalPath));
+    const stat = realPath === undefined ? undefined : await statOrUndefined(realPath);
+
+    if (realPath === undefined || !stat || !stat.isFile()) {
+      throw new StoragePathError('Markdown file does not exist');
+    }
+
+    return realPath;
+  }
+
   async function listTree(logicalPath = ''): Promise<TreeNode[]> {
     const basePath = pathResolver.resolvePath(logicalPath);
-    const stat = await statOrUndefined(basePath);
+    const realBasePath = await realPathOrUndefined(basePath);
+    const stat = realBasePath === undefined ? undefined : await statOrUndefined(realBasePath);
 
     if (!stat) {
       throw new StoragePathError('Path does not exist');
@@ -70,7 +112,11 @@ export function createFileRepository(pathResolver: PathResolver): FileRepository
       const absolutePath = path.join(basePath, entry.name);
       pathResolver.ensureInsideRoot(absolutePath);
 
-      const stat = await fs.stat(absolutePath);
+      // `lstat`, not `stat`: never follow a symlink entry, which could point out
+      // of the vault, or throw and fail the whole listing if it is broken.
+      // Symlinks are skipped below anyway (a `Dirent` is neither a file nor a
+      // directory for one), so this only changes how they fail to show up.
+      const stat = await fs.lstat(absolutePath);
       const relativePath = path
         .relative(pathResolver.getRootPath(), absolutePath)
         .split(path.sep)
@@ -106,53 +152,53 @@ export function createFileRepository(pathResolver: PathResolver): FileRepository
 
   async function createDirectory(logicalPath: string): Promise<void> {
     const absolutePath = pathResolver.resolvePath(logicalPath);
+    await pathResolver.ensureCreatableInsideRoot(absolutePath);
     await fs.mkdir(absolutePath, { recursive: true });
   }
 
   async function createMarkdownFile(logicalPath: string, content = ''): Promise<void> {
     const absolutePath = pathResolver.resolveMarkdownPath(logicalPath);
-    const existing = await statOrUndefined(absolutePath);
+    await pathResolver.ensureCreatableInsideRoot(absolutePath);
+    const existing = await lstatOrUndefined(absolutePath);
 
     if (existing) {
       throw new StoragePathError('File already exists');
     }
 
     await fs.mkdir(path.dirname(absolutePath), { recursive: true });
-    await fs.writeFile(absolutePath, content, 'utf8');
+    try {
+      // `wx` is O_CREAT | O_EXCL: it fails instead of following a symlink that
+      // appeared after the checks above, and never truncates an existing file.
+      await fs.writeFile(absolutePath, content, { encoding: 'utf8', flag: 'wx' });
+    } catch (error: unknown) {
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+        throw new StoragePathError('File already exists');
+      }
+      throw error;
+    }
   }
 
   async function readMarkdownFile(logicalPath: string): Promise<string> {
-    const absolutePath = pathResolver.resolveMarkdownPath(logicalPath);
-    const stat = await statOrUndefined(absolutePath);
-
-    if (!stat || !stat.isFile()) {
-      throw new StoragePathError('Markdown file does not exist');
-    }
-
-    return fs.readFile(absolutePath, 'utf8');
+    return fs.readFile(await realMarkdownFilePath(logicalPath), 'utf8');
   }
 
   async function updateMarkdownFile(logicalPath: string, content: string): Promise<void> {
-    const absolutePath = pathResolver.resolveMarkdownPath(logicalPath);
-    const stat = await statOrUndefined(absolutePath);
-
-    if (!stat || !stat.isFile()) {
-      throw new StoragePathError('Markdown file does not exist');
-    }
-
-    await fs.writeFile(absolutePath, content, 'utf8');
+    await fs.writeFile(await realMarkdownFilePath(logicalPath), content, 'utf8');
   }
 
   async function moveMarkdownFile(fromLogicalPath: string, toLogicalPath: string): Promise<void> {
     const sourcePath = pathResolver.resolveMarkdownPath(fromLogicalPath);
     const destinationPath = pathResolver.resolveMarkdownPath(toLogicalPath);
 
-    const sourceStat = await statOrUndefined(sourcePath);
+    const realSourcePath = await realPathOrUndefined(sourcePath);
+    const sourceStat =
+      realSourcePath === undefined ? undefined : await statOrUndefined(realSourcePath);
     if (!sourceStat || !sourceStat.isFile()) {
       throw new StoragePathError('Source markdown file does not exist');
     }
 
-    const destinationStat = await statOrUndefined(destinationPath);
+    await pathResolver.ensureCreatableInsideRoot(destinationPath);
+    const destinationStat = await lstatOrUndefined(destinationPath);
     if (destinationStat) {
       throw new StoragePathError('Destination already exists');
     }
@@ -168,20 +214,24 @@ export function createFileRepository(pathResolver: PathResolver): FileRepository
     }
 
     const absolutePath = pathResolver.resolvePath(normalized);
-    const stat = await statOrUndefined(absolutePath);
+    const realPath = await realPathOrUndefined(absolutePath);
+    const stat = realPath === undefined ? undefined : await statOrUndefined(realPath);
 
-    if (!stat) {
+    if (realPath === undefined || !stat) {
       throw new StoragePathError('Path does not exist');
     }
 
     if (stat.isDirectory()) {
       if (!options.recursive) {
-        const entries = await fs.readdir(absolutePath);
+        const entries = await fs.readdir(realPath);
         if (entries.length > 0) {
           throw new StoragePathError('Directory is not empty. Use recursive option to delete it');
         }
       }
 
+      // `rm` removes the entry at the requested path and, when recursive,
+      // unlinks any symlinks inside the folder without following them, so
+      // nothing outside the vault is ever emptied.
       await fs.rm(absolutePath, { recursive: Boolean(options.recursive), force: false });
       return;
     }

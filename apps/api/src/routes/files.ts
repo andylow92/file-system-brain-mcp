@@ -267,11 +267,15 @@ function toEtag(content: string, lastModified: string): string {
 }
 
 async function readDocumentFile(
+  pathResolver: PathResolver,
   absolutePath: string,
   logicalPath: string,
   format: DocumentFormat,
 ): Promise<FileResponse> {
-  const stat = await fs.stat(absolutePath);
+  // Read the real file, never whatever a symlink points at: a link out of the
+  // vault (or into `.fsbrain/`, or onto another format) is a 400 here.
+  const realPath = await pathResolver.resolveRealPath(absolutePath);
+  const stat = await fs.stat(realPath);
 
   if (!stat.isFile()) {
     throw new StoragePathError(
@@ -279,7 +283,7 @@ async function readDocumentFile(
     );
   }
 
-  const content = await fs.readFile(absolutePath, 'utf8');
+  const content = await fs.readFile(realPath, 'utf8');
   const lastModified = stat.mtime.toISOString();
   // Note ids live in markdown frontmatter only; HTML is returned verbatim and
   // never parsed for frontmatter, wikilinks, or tags.
@@ -307,7 +311,7 @@ async function loadFileFromContext(
   logicalPath: string,
 ): Promise<FileResponse> {
   const absolutePath = context.pathResolver.resolveMarkdownPath(logicalPath);
-  return readDocumentFile(absolutePath, logicalPath, 'markdown');
+  return readDocumentFile(context.pathResolver, absolutePath, logicalPath, 'markdown');
 }
 
 /**
@@ -319,7 +323,7 @@ async function loadDocumentFromContext(
   logicalPath: string,
 ): Promise<FileResponse> {
   const { absolutePath, format } = context.pathResolver.resolveDocumentPath(logicalPath);
-  return readDocumentFile(absolutePath, logicalPath, format);
+  return readDocumentFile(context.pathResolver, absolutePath, logicalPath, format);
 }
 
 /** Raised when two notes claim the same frontmatter `id:`. */
@@ -780,7 +784,9 @@ async function handlePatchPath(context: RequestContext): Promise<void> {
   const toPath = requireString(body.toPath, 'toPath');
 
   const sourceCandidatePath = pathResolver.resolvePath(fromPath);
-  const sourceStat = await fs.stat(sourceCandidatePath);
+  // The source must really live in the vault; a symlinked folder could
+  // otherwise pull an outside file in (or push a vault file out, below).
+  const sourceStat = await fs.stat(await pathResolver.resolveRealPath(sourceCandidatePath));
 
   let sourceAbsolutePath = sourceCandidatePath;
   let destinationAbsolutePath = pathResolver.resolvePath(toPath);
@@ -795,8 +801,10 @@ async function handlePatchPath(context: RequestContext): Promise<void> {
     throw new StoragePathError('Only directories and .md files can be moved');
   }
 
+  await pathResolver.ensureCreatableInsideRoot(destinationAbsolutePath);
   try {
-    await fs.stat(destinationAbsolutePath);
+    // `lstat`: a symlink, even a broken one, already occupies the name.
+    await fs.lstat(destinationAbsolutePath);
     sendError(res, 409, {
       code: 'conflict',
       message: 'Destination already exists',
@@ -1577,12 +1585,8 @@ async function currentNoteEtag(
 ): Promise<string | undefined> {
   try {
     const absolutePath = pathResolver.resolveMarkdownPath(logicalPath);
-    const stat = await fs.stat(absolutePath);
-    if (!stat.isFile()) {
-      return undefined;
-    }
-    const content = await fs.readFile(absolutePath, 'utf8');
-    return toEtag(content, stat.mtime.toISOString());
+    const file = await readDocumentFile(pathResolver, absolutePath, logicalPath, 'markdown');
+    return file.etag;
   } catch {
     return undefined;
   }
@@ -1600,7 +1604,8 @@ async function buildModifiedMap(
   const modifiedAt: Record<string, string> = {};
   for (const logicalPath of paths) {
     try {
-      const stat = await fs.stat(pathResolver.resolveMarkdownPath(logicalPath));
+      const absolutePath = pathResolver.resolveMarkdownPath(logicalPath);
+      const stat = await fs.stat(await pathResolver.resolveRealPath(absolutePath));
       if (stat.isFile()) {
         modifiedAt[logicalPath] = stat.mtime.toISOString();
       }
