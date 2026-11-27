@@ -210,4 +210,29 @@ describe('maintenance — scan → review proposals', () => {
     const after = await api<{ content: string }>('GET', '/api/file?path=dupA.md');
     expect(after.body.data!.content).toContain('Human edit.');
   });
+
+  it('only files stub proposals for markdown paths a human could approve', async () => {
+    // A stub for a link that escapes the vault, points into the hidden `.fsbrain/`
+    // store, or is absolute fails every write path's rules, so a proposal for it
+    // could only 400 on approval.
+    await seed(
+      'index.md',
+      '# Index\nSee [[ghost]], [[../outside]], [[.fsbrain/sneaky]], [[/abs]].',
+    );
+
+    const scan = await api<ScanResult>('POST', '/api/maintenance/scan');
+    expect(scan.status).toBe(200);
+    const { findings, proposalsFiled } = scan.body.data!;
+
+    // Every broken link is still reported...
+    const stubs = findings
+      .filter((f) => f.kind === 'broken_link')
+      .map((f) => f.suggestion!.path)
+      .sort();
+    expect(stubs).toEqual(['../outside.md', '.fsbrain/sneaky.md', '/abs.md', 'ghost.md']);
+    // ...but only the approvable stub reaches the Review queue.
+    expect(proposalsFiled.map((p) => p.path)).toEqual(['ghost.md']);
+    const pending = await api<EditProposal[]>('GET', '/api/proposals?status=pending');
+    expect(pending.body.data!.map((p) => p.path)).toEqual(['ghost.md']);
+  });
 });

@@ -596,7 +596,13 @@ Lets agents suggest changes a human approves before they touch the vault.
 path, content?, baseEtag?, note?, category? }`. `content` is required for create/update;
   `baseEtag` (from a prior read) makes a stale `update` fail on approval; the optional
   `category` is a grouping key for review-queue stats (see below). The proposer is the
-  `X-Actor` header. Returns the `EditProposal` (status `pending`).
+  `X-Actor` header. Returns the `EditProposal` (status `pending`). Proposals are
+  **markdown-only**: `path` is checked at creation with the same rules as every write path
+  (a `.md` file inside `CONTENT_ROOT`; no traversal, absolute, or hidden segments), so a
+  proposal for e.g. `report.html`, `notes.txt`, `../x.md`, or `.fsbrain/x.md` is rejected
+  with `400 invalid_path` rather than queued for review only to fail on approval. The
+  maintenance and feedback scans apply the same check and skip (but still report) a
+  suggestion whose path fails it.
 - `GET /api/proposals?status=pending|approved|rejected` — list proposals (newest first).
 - `GET /api/proposals/stats` — **review-queue learning**: returns
   `{ categories, recommendations }`. `categories` is the per-category approve/reject

@@ -648,11 +648,13 @@ function registerTools(
 
   register(
     'propose_edit',
-    'Propose a create/update/delete for human review instead of writing directly. ' +
-      'Use this when changes should be approved by the human before they land.',
+    'Propose a create/update/delete of a markdown note for human review instead of writing ' +
+      'directly. Use this when changes should be approved by the human before they land. ' +
+      'Proposals are markdown-only, like every write: a non-.md path (e.g. a read-only .html ' +
+      'document), a traversal or absolute path, or a hidden path is rejected with a 400.',
     {
       action: z.enum(['create', 'update', 'delete']),
-      path: z.string(),
+      path: z.string().describe('Logical path ending in .md.'),
       content: z.string().optional().describe('Required for create/update.'),
       baseEtag: z
         .string()

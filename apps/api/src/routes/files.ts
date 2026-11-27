@@ -1294,7 +1294,7 @@ async function handleGetAudit({ res, url, auditLog }: RequestContext): Promise<v
 const PROPOSAL_ACTIONS: ProposalAction[] = ['create', 'update', 'delete'];
 
 async function handleCreateProposal(context: RequestContext): Promise<void> {
-  const { req, res, proposalStore, actor } = context;
+  const { req, res, proposalStore, pathResolver, actor } = context;
   const body = await readJsonBody<Record<string, unknown>>(req);
   const action = requireString(body.action, 'action') as ProposalAction;
   if (!PROPOSAL_ACTIONS.includes(action)) {
@@ -1309,6 +1309,12 @@ async function handleCreateProposal(context: RequestContext): Promise<void> {
   if ((action === 'create' || action === 'update') && content === undefined) {
     throw new Error('"content" is required for create and update proposals');
   }
+
+  // Proposals are markdown-only, under the same rules as every write path (`.md`,
+  // no traversal / absolute / hidden segments). Checking here, not just on
+  // approval, keeps a proposal that can never be applied (e.g. for `report.html`
+  // or `.fsbrain/...`) out of the Review queue: `StoragePathError` → 400.
+  pathResolver.resolveMarkdownPath(logicalPath);
 
   const proposal = await proposalStore.create({
     actor,
@@ -1540,6 +1546,22 @@ async function currentNoteEtag(
 }
 
 /**
+ * Whether a proposal for `logicalPath` could ever be approved — the same
+ * markdown-only rules `POST /api/proposals` and every write path enforce. The
+ * scans skip a suggestion that fails them (a stub for `[[../x]]`, a feedback
+ * `targetPath: .fsbrain/x`) instead of filing a proposal that can only 400 on
+ * approval; the finding itself is still reported.
+ */
+function isProposablePath(pathResolver: PathResolver, logicalPath: string): boolean {
+  try {
+    pathResolver.resolveMarkdownPath(logicalPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Build a `logical path → last-modified ISO` map from each note's mtime, used to
  * feed the maintenance scan's freshness ("stale but load-bearing") detection.
  * A path that can't be stat'd is simply omitted, so it is never flagged stale.
@@ -1635,7 +1657,7 @@ export async function runMaintenanceScan(deps: {
   const proposalsFiled: EditProposal[] = [];
   for (const finding of findings) {
     const { suggestion } = finding;
-    if (!suggestion) {
+    if (!suggestion || !isProposablePath(deps.pathResolver, suggestion.path)) {
       continue;
     }
     const key = `${suggestion.action}:${suggestion.path}`;
@@ -1755,7 +1777,7 @@ export async function runFeedbackScan(deps: {
   const proposalsFiled: EditProposal[] = [];
   for (const finding of findings) {
     const { suggestion } = finding;
-    if (!suggestion) {
+    if (!suggestion || !isProposablePath(deps.pathResolver, suggestion.path)) {
       continue;
     }
     const key = `${suggestion.action}:${suggestion.path}`;

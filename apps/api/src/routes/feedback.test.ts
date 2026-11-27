@@ -175,4 +175,35 @@ describe('feedback loop — reviewed draft→final pairs become review proposals
       true,
     );
   });
+
+  it('never files a lesson against a targetPath outside the markdown write rules', async () => {
+    // A free-text `targetPath` that escapes the vault or points into the hidden
+    // `.fsbrain/` store could only 400 on approval, so it is reported, not filed.
+    await seedPair({
+      channel: 'x',
+      slug: 'launch',
+      draft: '# x\n\nLong salesy X draft that goes on and on about the platform.',
+      final: '# x\n\nTight X post.',
+      targetPath: '../escape',
+    });
+    await seedPair({
+      channel: 'email',
+      slug: 'advisor',
+      draft: '# em\n\nLong advisor email with a broad pitch nobody asked for.',
+      final: '# em\n\nOne clear ask.',
+      targetPath: '.fsbrain/playbook',
+    });
+    await seedPair({
+      channel: 'linkedin',
+      slug: 'intro',
+      draft: '# li\n\nGeneric broad pitch with no specific workflow pain mentioned.',
+      final: '# li\n\nNoticed your audit-evidence workflow pain — worth a quick chat?',
+    });
+
+    const scan = await api<ScanResult>('POST', '/api/feedback/scan');
+    expect(scan.status).toBe(200);
+    const suggested = scan.body.data!.findings.map((f) => f.suggestion?.path).sort();
+    expect(suggested).toEqual(['../escape.md', '.fsbrain/playbook.md', 'feedback/linkedin.md']);
+    expect(scan.body.data!.proposalsFiled.map((p) => p.path)).toEqual(['feedback/linkedin.md']);
+  });
 });

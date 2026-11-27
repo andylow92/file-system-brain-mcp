@@ -5,7 +5,28 @@
 > Keep it accurate: update the status tables when you finish a unit of work.
 > Routed from [`AGENTS.md`](../AGENTS.md).
 
-_Last updated: 2026-07-07 (embeddings: persisted index + eval)_
+_Last updated: 2026-11-27 (proposals: markdown-only paths checked at creation)_
+
+> **Latest change.** **Proposals are validated as markdown-only when created.**
+> `POST /api/proposals` (and so the `propose_edit` MCP tool) used to check only
+> that `path` was a non-empty string, so a proposal for `report.html`,
+> `notes.txt`, `../x.md`, or `.fsbrain/x.md` was accepted, sat in the human's
+> Review queue, and only failed with a `400` once they approved it. The handler
+> now runs `pathResolver.resolveMarkdownPath` before storing anything — the same
+> `.md` / traversal / absolute / hidden-segment rules every write path uses — so
+> such a proposal is rejected up front with `400 invalid_path`, and nothing is
+> stored or published on the event bus. The internal filers (dream-cycle
+> maintenance scan, feedback loop) write to the `ProposalStore` directly, so they
+> apply the same check (`isProposablePath` in `routes/files.ts`): a suggestion
+> whose path fails it — a stub for a raw `[[../x]]` / `[[.fsbrain/x]]` /
+> `[[/x]]` link, or a free-text feedback `targetPath` like `../x` — is still
+> reported as a finding but no longer filed. One narrow behavior change: a
+> `delete` proposal for an empty folder (previously approvable when it carried no
+> `baseEtag`) is now rejected at creation; folder deletes go through
+> `DELETE /api/path` (`delete_path`). Tests: `apps/api`
+> `routes/proposalPathValidation.test.ts` (each bad path × create/update/delete →
+> 400, nothing stored or emitted; `.md` proposals still apply end to end) plus a
+> case each in `routes/maintenance.test.ts` and `routes/feedback.test.ts`.
 
 > **Latest change.** **Embedding retrieval eval.** The embedding engine now has a
 > regression harness, closing the last open piece of #13. It runs in two layers.
