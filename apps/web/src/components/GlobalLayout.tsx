@@ -838,8 +838,8 @@ export function GlobalLayout({
             ref={mobileSidebarTriggerRef}
             type="button"
             className="icon-btn mobile-sidebar-trigger"
-            onClick={openMobileSidebar}
-            aria-label="Open sidebar"
+            onClick={isMobileSidebarOpen ? closeMobileSidebar : openMobileSidebar}
+            aria-label={isMobileSidebarOpen ? 'Close sidebar' : 'Open sidebar'}
             aria-expanded={isMobileSidebarOpen}
             aria-controls="app-sidebar"
           >

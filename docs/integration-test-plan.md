@@ -41,6 +41,23 @@ Validate end-to-end confidence for filesystem CRUD, markdown editing, preview pa
 - [ ] Re-open file and confirm content remains available.
 - [ ] If containerized, restart container and verify files still exist via mounted host volume.
 
+### 5) Responsive layout (mobile file tree)
+
+jsdom applies no media queries, so `apps/web` `responsiveStyles.test.ts` only checks the stylesheet
+cascade; this pass checks the real rendering. Use the browser's device toolbar (touch emulation on)
+or resize the window.
+
+- [ ] At 390px wide (phone), a menu button shows at the left of the top bar, and nothing in the bar
+      overlaps (logo, `Live`, `Saved`, Settings, Save).
+- [ ] Tap the menu button: the file tree slides in just below the top bar over a dimmed backdrop.
+      Tap the menu button again: it closes.
+- [ ] Reopen it and pick a file: the drawer closes and the file opens. Reopening and then tapping the
+      backdrop, or pressing `Escape`, also closes it.
+- [ ] At 768px (tablet), the drawer behaves the same, and a long file path stays on one line,
+      truncated with `…`, without growing the top bar.
+- [ ] At 1280px (desktop), there is no menu button, the sidebar sits flush under the top bar, and a
+      short note shows no page scrollbar.
+
 ## Exit Criteria
 
 - All checklist items pass without data loss.

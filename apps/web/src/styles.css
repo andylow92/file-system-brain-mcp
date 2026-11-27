@@ -79,6 +79,11 @@
   --space-fluid-4: clamp(0.85rem, 0.65rem + 0.5vw, 1.15rem);
   --space-fluid-5: clamp(1rem, 0.7rem + 1.1vw, 1.75rem);
 
+  /* Top bar height (60px). The sidebar is offset and sized by it, so the bar
+     takes it as a min-height instead of leaving its height to content: 0.75rem
+     padding ×2 + the 35px Save button + 1px border. Raised for touch below. */
+  --topbar-height: 3.75rem;
+
   /* Tight, native-feeling radii. */
   --radius-sm: 6px;
   --radius-md: 8px;
@@ -254,6 +259,7 @@ body {
   grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: var(--space-4);
+  min-height: var(--topbar-height);
   padding: var(--space-3) var(--space-fluid-5);
   border-bottom: 1px solid var(--color-border);
   background: var(--material-topbar);
@@ -267,12 +273,19 @@ body {
 .brand {
   display: inline-flex;
   align-items: center;
+  min-width: 0;
 }
 
+/* On a crowded phone bar the logo scales down instead of sliding under the
+   actions. */
 .brand-logo {
   height: 28px;
   width: auto;
   display: block;
+  min-width: 0;
+  max-width: 100%;
+  object-fit: contain;
+  object-position: left center;
 }
 
 .topbar-left-group {
@@ -282,12 +295,15 @@ body {
   min-width: 0;
 }
 
+/* One line, clipped to its grid cell: a long path truncates rather than
+   wrapping (which grew the bar) or painting over the actions beside it. */
 .breadcrumbs {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
   gap: 0.2rem 0.1rem;
   min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
   color: var(--color-text-muted);
   font-size: var(--type-label);
 }
@@ -296,10 +312,20 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* The open file is what matters: parent folders give way first. */
+.breadcrumb-group:last-child {
+  flex-shrink: 0;
+  max-width: 100%;
 }
 
 .breadcrumb {
   font-size: var(--type-label);
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .breadcrumb.current {
@@ -314,6 +340,8 @@ body {
 .breadcrumb-empty {
   color: var(--color-text-dim);
   font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .topbar-actions {
@@ -476,9 +504,9 @@ body {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  height: calc(100vh - 53px);
+  height: calc(100vh - var(--topbar-height));
   position: sticky;
-  top: 53px;
+  top: var(--topbar-height);
   overflow-y: auto;
 }
 
@@ -2971,6 +2999,11 @@ select:focus-visible {
 /* -------------------------------------------------------------------------- */
 
 @media (pointer: coarse) {
+  :root {
+    /* 69px: the bar's controls grow to the 44px targets below. */
+    --topbar-height: calc(2 * var(--space-3) + 45px);
+  }
+
   .icon-btn,
   .toolbar-btn,
   .tab,
@@ -3007,6 +3040,15 @@ select:focus-visible {
   }
 }
 
+/* Mobile-only chrome, hidden by default. Source order is load-bearing: this
+   must come after `.icon-btn` (whose `display: inline-flex` would otherwise
+   show the trigger on desktop) and before the 900px query below, whose
+   same-specificity overrides must win on small screens. */
+.mobile-sidebar-trigger,
+.sidebar-backdrop {
+  display: none;
+}
+
 @media (max-width: 900px) {
   .layout,
   .layout--sidebar-collapsed {
@@ -3020,7 +3062,7 @@ select:focus-visible {
   .left-panel,
   .left-panel--collapsed {
     position: fixed;
-    top: 53px;
+    top: var(--topbar-height);
     left: 0;
     bottom: 0;
     width: min(86vw, 320px);
@@ -3044,7 +3086,7 @@ select:focus-visible {
   .sidebar-backdrop {
     display: block;
     position: fixed;
-    top: 53px;
+    top: var(--topbar-height);
     left: 0;
     right: 0;
     bottom: 0;
@@ -3075,6 +3117,17 @@ select:focus-visible {
     padding: 0.35rem;
     justify-content: center;
   }
+
+  /* No room for the path beside the sidebar trigger (the open file stays
+     highlighted in the drawer's tree), and no ⌘ key on a phone. */
+  .topbar {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .breadcrumbs,
+  .save-kbd {
+    display: none;
+  }
 }
 
 @media (max-width: 720px) {
@@ -3086,11 +3139,6 @@ select:focus-visible {
     border-left: 0;
     border-top: 1px solid var(--color-border);
   }
-}
-
-.mobile-sidebar-trigger,
-.sidebar-backdrop {
-  display: none;
 }
 
 /* -------------------------------------------------------------------------- */

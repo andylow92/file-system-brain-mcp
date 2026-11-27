@@ -5,7 +5,29 @@
 > Keep it accurate: update the status tables when you finish a unit of work.
 > Routed from [`AGENTS.md`](../AGENTS.md).
 
-_Last updated: 2026-07-07 (embeddings: persisted index + eval)_
+_Last updated: 2026-11-27 (web: mobile sidebar trigger + top bar layout)_
+
+> **Latest change.** **The file tree is reachable on phones and tablets again.**
+> Below 900px the sidebar is a slide-in drawer opened by a top-bar menu button,
+> but an unconditional `display: none` for `.mobile-sidebar-trigger` /
+> `.sidebar-backdrop` sat _after_ the `@media (max-width: 900px)` override at
+> equal specificity, so it won at every width: no button, no way to open the
+> tree. The base rule now precedes the query (and still follows `.icon-btn`,
+> which would otherwise show the button on desktop), and the button toggles the
+> drawer (`aria-expanded`, Open/Close label). Two related top-bar fixes found
+> while verifying at 390px / 1280px: **(1)** the sidebar was offset and sized by
+> a stale `53px` while the bar is 60px (69px with 44px touch targets) — 7px of
+> page scroll on desktop, and the drawer + backdrop overlapping the bar — so all
+> of them now read one `--topbar-height` token the bar is pinned to; **(2)** at
+> phone width the breadcrumb wrapped one segment per line (a 132px bar) and
+> painted over the `Live` indicator — it is now one clipped line (parent folders
+> truncate first), hidden at ≤480px along with the ⌘S hint, and the logo scales
+> down instead of sliding under the actions. Tests: `apps/web`
+> `__tests__/responsiveStyles.test.ts` resolves `display` for the button and
+> backdrop from `styles.css` per viewport width (jsdom applies no media queries)
+> and fails on the old rule order; drawer behavior cases in
+> `GlobalLayout.test.tsx`; manual pass in
+> [`integration-test-plan.md`](integration-test-plan.md) §5.
 
 > **Latest change.** **Embedding retrieval eval.** The embedding engine now has a
 > regression harness, closing the last open piece of #13. It runs in two layers.
@@ -451,6 +473,7 @@ Key facts an agent must know:
 | Capability                                  | Status | Notes                                                                                                       |
 | ------------------------------------------- | :----: | ----------------------------------------------------------------------------------------------------------- |
 | GitHub-style file tree + folders-first sort |   ✅   | `FileTreeSidebar`, `GlobalLayout`                                                                           |
+| Mobile file-tree drawer (below 900px)       |   ✅   | `GlobalLayout` menu button + backdrop, `styles.css` 900px query; `responsiveStyles.test.ts`                 |
 | Create / rename / move / delete (md + dirs) |   ✅   | `/api/file`, `/api/dir`, `/api/path`                                                                        |
 | Read / update with optimistic concurrency   |   ✅   | `etag` / `lastModified` in `handlePutFile`                                                                  |
 | Edit ↔ Preview tabs                         |   ✅   | `FileViewerTabs`; hard toggle (not live WYSIWYG)                                                            |

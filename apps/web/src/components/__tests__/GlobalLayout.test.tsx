@@ -44,11 +44,12 @@ describe('GlobalLayout', () => {
 
   function renderLayout() {
     const onRenamePath = vi.fn(async () => {});
+    const onSelectFile = vi.fn();
     const view = render(
       <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <GlobalLayout
           tree={tree}
-          onSelectFile={vi.fn()}
+          onSelectFile={onSelectFile}
           onCreateFile={vi.fn(async () => {})}
           onCreateFolder={vi.fn(async () => {})}
           onRenamePath={onRenamePath}
@@ -60,7 +61,7 @@ describe('GlobalLayout', () => {
       </MemoryRouter>,
     );
 
-    return { ...view, onRenamePath };
+    return { ...view, onRenamePath, onSelectFile };
   }
 
   // -------------------------------------------------------------------------
@@ -420,6 +421,73 @@ describe('GlobalLayout', () => {
 
     expect(screen.queryByRole('tree')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Expand sidebar' })).toBeInTheDocument();
+  });
+
+  // -------------------------------------------------------------------------
+  // Mobile sidebar drawer (below 900px the tree is only reachable through the
+  // topbar trigger; whether the trigger is *visible* lives in styles.css and is
+  // covered by __tests__/responsiveStyles.test.ts)
+  // -------------------------------------------------------------------------
+
+  const sidebar = () => document.getElementById('app-sidebar');
+  const backdrop = () => document.querySelector('.sidebar-backdrop');
+
+  it('renders a mobile sidebar trigger that controls the sidebar, closed by default', () => {
+    renderLayout();
+
+    const trigger = screen.getByRole('button', { name: 'Open sidebar' });
+    expect(trigger).toHaveClass('mobile-sidebar-trigger');
+    expect(trigger).toHaveAttribute('aria-controls', 'app-sidebar');
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(sidebar()).not.toBeNull();
+    expect(sidebar()).not.toHaveClass('left-panel--mobile-open');
+    expect(backdrop()).toBeNull();
+  });
+
+  it('opens the drawer with a backdrop and closes it again from the trigger', () => {
+    renderLayout();
+    const trigger = screen.getByRole('button', { name: 'Open sidebar' });
+
+    fireEvent.click(trigger);
+    expect(trigger).toHaveAccessibleName('Close sidebar');
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    expect(sidebar()).toHaveClass('left-panel--mobile-open');
+    expect(backdrop()).toBeInTheDocument();
+
+    fireEvent.click(trigger);
+    expect(trigger).toHaveAccessibleName('Open sidebar');
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(sidebar()).not.toHaveClass('left-panel--mobile-open');
+    expect(backdrop()).toBeNull();
+  });
+
+  it('closes the drawer from the backdrop or Escape and returns focus to the trigger', () => {
+    renderLayout();
+    const trigger = screen.getByRole('button', { name: 'Open sidebar' });
+
+    fireEvent.click(trigger);
+    fireEvent.click(backdrop()!);
+    expect(sidebar()).not.toHaveClass('left-panel--mobile-open');
+    expect(backdrop()).toBeNull();
+    expect(trigger).toHaveFocus();
+
+    fireEvent.click(trigger);
+    screen.getByPlaceholderText('Filter files').focus();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(sidebar()).not.toHaveClass('left-panel--mobile-open');
+    expect(backdrop()).toBeNull();
+    expect(trigger).toHaveFocus();
+  });
+
+  it('closes the drawer once a file is picked from it', async () => {
+    const { onSelectFile } = renderLayout();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open sidebar' }));
+    fireEvent.click(screen.getByRole('treeitem', { name: 'intro.md' }));
+
+    await waitFor(() => expect(backdrop()).toBeNull());
+    expect(onSelectFile).toHaveBeenCalledWith('docs/nested/intro.md');
+    expect(sidebar()).not.toHaveClass('left-panel--mobile-open');
   });
 
   // -------------------------------------------------------------------------
